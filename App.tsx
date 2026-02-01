@@ -26,8 +26,15 @@ export default function App() {
         </Text>
       </View>
 
+      {/* IMPORTANT: Keep both screens mounted so state doesn't reset when switching tabs */}
       <View style={{ flex: 1 }}>
-        {tab === "capture" ? <CaptureScreen /> : <LogScreen />}
+        <View style={{ flex: 1, display: tab === "capture" ? "flex" : "none" }}>
+          <CaptureScreen isActive={tab === "capture"} />
+        </View>
+
+        <View style={{ flex: 1, display: tab === "log" ? "flex" : "none" }}>
+          <LogScreen isActive={tab === "log"} />
+        </View>
       </View>
 
       <View
