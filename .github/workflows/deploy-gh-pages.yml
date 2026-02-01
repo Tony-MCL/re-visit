@@ -2,7 +2,7 @@ name: Deploy Expo Web to GitHub Pages
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_dispatch:
 
 permissions:
@@ -27,11 +27,16 @@ jobs:
           node-version: "20"
           cache: "npm"
 
-      - name: Install deps
-        run: npm ci || npm install
+      - name: Install deps (no lockfile)
+        run: npm install
 
       - name: Export web build
-        run: npx expo export --platform web
+        run: npx expo export -p web
+
+      # GitHub Pages uses Jekyll by default; Expo outputs folders like _expo
+      # Adding .nojekyll prevents Jekyll from stripping underscore paths.
+      - name: Disable Jekyll
+        run: touch dist/.nojekyll
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
@@ -48,4 +53,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
