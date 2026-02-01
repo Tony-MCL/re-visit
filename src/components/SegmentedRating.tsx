@@ -24,6 +24,7 @@ export default function SegmentedRating({
         borderColor: theme.border,
         borderRadius: 14,
         overflow: "hidden",
+        backgroundColor: theme.surface,
       }}
     >
       {options.map((opt, idx) => {
@@ -34,16 +35,34 @@ export default function SegmentedRating({
             onPress={() => onChange(opt.key)}
             style={{
               flex: 1,
-              paddingVertical: 10,
+              paddingVertical: 12,
               paddingHorizontal: 10,
               backgroundColor: active ? theme.card : "transparent",
               borderLeftWidth: idx === 0 ? 0 : 1,
               borderLeftColor: theme.border,
               alignItems: "center",
               justifyContent: "center",
+              flexDirection: "row",
+              gap: 6,
             }}
           >
-            <Text style={{ color: theme.text, fontWeight: "800" }}>
+            {active ? (
+              <View
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 999,
+                  backgroundColor: theme.accent,
+                }}
+              />
+            ) : null}
+
+            <Text
+              style={{
+                color: active ? theme.text : theme.muted,
+                fontWeight: active ? "900" : "700",
+              }}
+            >
               {opt.emoji} {opt.label}
             </Text>
           </Pressable>
