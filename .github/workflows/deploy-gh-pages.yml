@@ -25,7 +25,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
 
       - name: Install deps (no lockfile)
         run: npm install
@@ -33,8 +32,7 @@ jobs:
       - name: Export web build
         run: npx expo export -p web
 
-      # GitHub Pages uses Jekyll by default; Expo outputs folders like _expo
-      # Adding .nojekyll prevents Jekyll from stripping underscore paths.
+      # Prevent GitHub Pages/Jekyll from stripping underscore folders (e.g. _expo)
       - name: Disable Jekyll
         run: touch dist/.nojekyll
 
