@@ -1,5 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Image, Platform, Text, TextInput, View } from "react-native";
+import {
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Location from "expo-location";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -43,7 +52,6 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
     })();
   }, []);
 
-  // When returning to this tab, clear any transient status text
   useEffect(() => {
     if (isActive) setStatus("");
   }, [isActive]);
@@ -135,7 +143,7 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
           accuracyM: pos.coords.accuracy ?? undefined,
         };
       } catch {
-        // ok: save without location if it fails
+        // ok
       }
     }
 
@@ -167,83 +175,111 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
   };
 
   return (
-    <View style={{ flex: 1, paddingHorizontal: 16, paddingBottom: 16 }}>
-      <View
-        style={{
-          backgroundColor: theme.card,
-          borderRadius: 16,
-          borderWidth: 1,
-          borderColor: theme.border,
-          overflow: "hidden",
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{
+          paddingHorizontal: 16,
+          paddingBottom: 28, // base padding
         }}
+        keyboardShouldPersistTaps="handled"
       >
-        {photoUri ? (
-          <Image
-            source={{ uri: photoUri }}
-            style={{ width: "100%", height: 360 }}
-            resizeMode="cover"
-          />
-        ) : (
-          // pointerEvents="none" prevents the camera element from capturing touches on mobile web
-          <View style={{ height: 360 }} pointerEvents="none">
-            <CameraView ref={camRef} style={{ flex: 1 }} facing="back" />
-          </View>
-        )}
-      </View>
-
-      <View style={{ marginTop: 12 }}>
-        <PrimaryButton
-          title={photoUri ? "Ta nytt bilde" : "Ta bilde"}
-          onPress={onTakePhoto}
-          disabled={busy}
-        />
-      </View>
-
-      {status ? (
-        <Text style={{ color: theme.muted, marginTop: 10 }}>{status}</Text>
-      ) : null}
-
-      <View style={{ marginTop: 14 }}>
-        <Text style={{ color: theme.text, fontWeight: "800", marginBottom: 8 }}>
-          Likte jeg dette?
-        </Text>
-        <SegmentedRating value={rating} onChange={setRating} />
-      </View>
-
-      <View style={{ marginTop: 14 }}>
-        <Text style={{ color: theme.text, fontWeight: "800", marginBottom: 8 }}>
-          Valgfri kommentar (1–2 linjer)
-        </Text>
-        <TextInput
-          value={comment}
-          onChangeText={setComment}
-          placeholder="Skriv kort..."
-          placeholderTextColor={theme.muted}
+        <View
           style={{
-            backgroundColor: theme.surface,
+            backgroundColor: theme.card,
+            borderRadius: 16,
             borderWidth: 1,
             borderColor: theme.border,
-            borderRadius: 14,
-            paddingHorizontal: 12,
-            paddingVertical: 10,
-            color: theme.text,
+            overflow: "hidden",
           }}
-          maxLength={140}
-          multiline
-        />
-      </View>
+        >
+          {photoUri ? (
+            <Image
+              source={{ uri: photoUri }}
+              style={{ width: "100%", height: 360 }}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={{ height: 360 }} pointerEvents="none">
+              <CameraView ref={camRef} style={{ flex: 1 }} facing="back" />
+            </View>
+          )}
+        </View>
 
-      <View style={{ marginTop: 14 }}>
-        <PrimaryButton title="Lagre øyeblikk" onPress={onSave} disabled={!canSave} />
-        <Text style={{ color: theme.muted, marginTop: 8 }}>
-          Tid lagres alltid. GPS lagres hvis tillatt.
-        </Text>
-        {Platform.OS === "web" ? (
-          <Text style={{ color: theme.muted, marginTop: 6 }}>
-            (Web: bildet lagres som komprimert data for stabil visning.)
-          </Text>
+        <View style={{ marginTop: 12 }}>
+          <PrimaryButton
+            title={photoUri ? "Ta nytt bilde" : "Ta bilde"}
+            onPress={onTakePhoto}
+            disabled={busy}
+          />
+        </View>
+
+        {status ? (
+          <Text style={{ color: theme.muted, marginTop: 10 }}>{status}</Text>
         ) : null}
-      </View>
-    </View>
+
+        <View style={{ marginTop: 14 }}>
+          <Text style={{ color: theme.text, fontWeight: "800", marginBottom: 8 }}>
+            Likte jeg dette?
+          </Text>
+
+          {/* Make selection visibly obvious */}
+          <View
+            style={{
+              borderRadius: 16,
+              borderWidth: rating ? 2 : 1,
+              borderColor: rating ? theme.accent : theme.border,
+              padding: 2,
+            }}
+          >
+            <SegmentedRating value={rating} onChange={setRating} />
+          </View>
+
+          <Text style={{ color: theme.muted, marginTop: 8 }}>
+            Valgt:{" "}
+            <Text style={{ color: theme.text, fontWeight: "800" }}>
+              {rating === "yes" ? "Ja" : rating === "neutral" ? "Nøytral" : rating === "no" ? "Nei" : "—"}
+            </Text>
+          </Text>
+        </View>
+
+        <View style={{ marginTop: 14 }}>
+          <Text style={{ color: theme.text, fontWeight: "800", marginBottom: 8 }}>
+            Valgfri kommentar (1–2 linjer)
+          </Text>
+          <TextInput
+            value={comment}
+            onChangeText={setComment}
+            placeholder="Skriv kort..."
+            placeholderTextColor={theme.muted}
+            style={{
+              backgroundColor: theme.surface,
+              borderWidth: 1,
+              borderColor: theme.border,
+              borderRadius: 14,
+              paddingHorizontal: 12,
+              paddingVertical: 10,
+              color: theme.text,
+              minHeight: 44,
+            }}
+            maxLength={140}
+            multiline
+          />
+        </View>
+
+        <View style={{ marginTop: 14 }}>
+          <PrimaryButton title="Lagre øyeblikk" onPress={onSave} disabled={!canSave} />
+          <Text style={{ color: theme.muted, marginTop: 8 }}>
+            Tid lagres alltid. GPS lagres hvis tillatt.
+          </Text>
+        </View>
+
+        {/* Extra space so the bottom tab bar never hides the save button */}
+        <View style={{ height: 90 }} />
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
