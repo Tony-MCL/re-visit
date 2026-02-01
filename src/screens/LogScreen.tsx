@@ -16,17 +16,24 @@ function prettyDate(iso: string) {
   return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 }
 
-export default function LogScreen() {
+export default function LogScreen({ isActive }: { isActive: boolean }) {
   const [entries, setEntries] = useState<VisitEntry[]>([]);
+  const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
-    const e = await loadEntries();
-    setEntries(e);
+    setBusy(true);
+    try {
+      const e = await loadEntries();
+      setEntries(e);
+    } finally {
+      setBusy(false);
+    }
   }, []);
 
+  // Refresh whenever screen becomes active
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    if (isActive) refresh();
+  }, [isActive, refresh]);
 
   const empty = useMemo(() => entries.length === 0, [entries.length]);
 
@@ -52,7 +59,7 @@ export default function LogScreen() {
     <View style={{ flex: 1, paddingHorizontal: 16 }}>
       <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}>
         <Text style={{ color: theme.muted, flex: 1 }}>
-          {entries.length} oppføringer
+          {busy ? "Laster…" : `${entries.length} oppføringer`}
         </Text>
         <Pressable onPress={refresh} style={{ padding: 10 }}>
           <Text style={{ color: theme.accent, fontWeight: "800" }}>Oppdater</Text>
