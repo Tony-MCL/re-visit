@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Image, Text, TextInput, View } from "react-native";
+import { Alert, Image, Platform, Text, TextInput, View } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Location from "expo-location";
+import * as ImageManipulator from "expo-image-manipulator";
+
 import PrimaryButton from "../components/PrimaryButton";
 import SegmentedRating from "../components/SegmentedRating";
 import { theme } from "../ui/theme";
@@ -14,6 +16,7 @@ function makeId() {
 
 export default function CaptureScreen() {
   const camRef = useRef<CameraView>(null);
+
   const [camPerm, requestCamPerm] = useCameraPermissions();
   const [locGranted, setLocGranted] = useState<boolean>(false);
 
@@ -21,7 +24,10 @@ export default function CaptureScreen() {
   const [rating, setRating] = useState<Rating | null>(null);
   const [comment, setComment] = useState<string>("");
 
-  const canSave = useMemo(() => !!photoUri && !!rating, [photoUri, rating]);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string>("");
+
+  const canSave = useMemo(() => !!photoUri && !!rating && !busy, [photoUri, rating, busy]);
 
   useEffect(() => {
     (async () => {
@@ -47,22 +53,69 @@ export default function CaptureScreen() {
       return;
     }
 
+    setBusy(true);
+    setStatus("Tar bilde…");
+
     try {
       const cam = camRef.current;
-      if (!cam) return;
+      if (!cam) throw new Error("Camera ref missing");
 
-      const photo = await cam.takePictureAsync({
-        quality: 0.85,
+      // På web er "uri" ofte upålitelig — vi ber om base64.
+      const wantBase64 = Platform.OS === "web";
+
+      const raw = await cam.takePictureAsync({
+        quality: wantBase64 ? 0.55 : 0.85,
+        base64: wantBase64,
+        exif: false,
       });
 
-      setPhotoUri(photo.uri);
-    } catch {
-      Alert.alert("Feil", "Kunne ikke ta bilde.");
+      // 1) Hvis vi får en brukbar uri (native, eller noen web-case), bruk den
+      if (raw?.uri) {
+        // For web: komprimer/resize litt slik at lagring og visning blir stabilt
+        if (Platform.OS === "web") {
+          setStatus("Optimaliserer…");
+          const manipulated = await ImageManipulator.manipulateAsync(
+            raw.uri,
+            [{ resize: { width: 1080 } }],
+            { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+          );
+
+          if (manipulated.base64) {
+            setPhotoUri(`data:image/jpeg;base64,${manipulated.base64}`);
+          } else {
+            // fallback: bruk uri hvis base64 ikke finnes
+            setPhotoUri(manipulated.uri);
+          }
+        } else {
+          setPhotoUri(raw.uri);
+        }
+
+        setStatus("");
+        return;
+      }
+
+      // 2) Web fallback: base64 direkte fra kamera
+      if (wantBase64 && raw?.base64) {
+        setPhotoUri(`data:image/jpeg;base64,${raw.base64}`);
+        setStatus("");
+        return;
+      }
+
+      throw new Error("No usable photo data returned");
+    } catch (e) {
+      console.error(e);
+      setStatus("");
+      Alert.alert("Feil", "Kunne ikke ta bilde. Prøv igjen.");
+    } finally {
+      setBusy(false);
     }
   };
 
   const onSave = async () => {
     if (!photoUri || !rating) return;
+
+    setBusy(true);
+    setStatus("Lagrer…");
 
     let loc:
       | { lat: number; lng: number; accuracyM?: number }
@@ -94,12 +147,19 @@ export default function CaptureScreen() {
 
     try {
       await addEntry(entry);
+
       setPhotoUri(null);
       setRating(null);
       setComment("");
+      setStatus("");
+
       Alert.alert("Lagret", "Opplevelsen er lagret i loggen din.");
-    } catch {
+    } catch (e) {
+      console.error(e);
+      setStatus("");
       Alert.alert("Feil", "Kunne ikke lagre opplevelsen.");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -122,11 +182,7 @@ export default function CaptureScreen() {
           />
         ) : (
           <View style={{ height: 360 }}>
-            <CameraView
-              ref={camRef}
-              style={{ flex: 1 }}
-              facing="back"
-            />
+            <CameraView ref={camRef} style={{ flex: 1 }} facing="back" />
           </View>
         )}
       </View>
@@ -135,8 +191,13 @@ export default function CaptureScreen() {
         <PrimaryButton
           title={photoUri ? "Ta nytt bilde" : "Ta bilde"}
           onPress={onTakePhoto}
+          disabled={busy}
         />
       </View>
+
+      {status ? (
+        <Text style={{ color: theme.muted, marginTop: 10 }}>{status}</Text>
+      ) : null}
 
       <View style={{ marginTop: 14 }}>
         <Text style={{ color: theme.text, fontWeight: "800", marginBottom: 8 }}>
@@ -173,6 +234,11 @@ export default function CaptureScreen() {
         <Text style={{ color: theme.muted, marginTop: 8 }}>
           Tid lagres alltid. GPS lagres hvis tillatt.
         </Text>
+        {Platform.OS === "web" ? (
+          <Text style={{ color: theme.muted, marginTop: 6 }}>
+            (Web: bildet lagres som komprimert data for stabil visning.)
+          </Text>
+        ) : null}
       </View>
     </View>
   );
