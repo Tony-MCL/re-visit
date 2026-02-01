@@ -14,7 +14,7 @@ function makeId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-export default function CaptureScreen() {
+export default function CaptureScreen({ isActive }: { isActive: boolean }) {
   const camRef = useRef<CameraView>(null);
 
   const [camPerm, requestCamPerm] = useCameraPermissions();
@@ -27,7 +27,10 @@ export default function CaptureScreen() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string>("");
 
-  const canSave = useMemo(() => !!photoUri && !!rating && !busy, [photoUri, rating, busy]);
+  const canSave = useMemo(
+    () => !!photoUri && !!rating && !busy,
+    [photoUri, rating, busy]
+  );
 
   useEffect(() => {
     (async () => {
@@ -39,6 +42,11 @@ export default function CaptureScreen() {
       }
     })();
   }, []);
+
+  // When returning to this tab, clear any transient status text
+  useEffect(() => {
+    if (isActive) setStatus("");
+  }, [isActive]);
 
   const ensureCamera = async () => {
     if (camPerm?.granted) return true;
@@ -60,7 +68,6 @@ export default function CaptureScreen() {
       const cam = camRef.current;
       if (!cam) throw new Error("Camera ref missing");
 
-      // På web er "uri" ofte upålitelig — vi ber om base64.
       const wantBase64 = Platform.OS === "web";
 
       const raw = await cam.takePictureAsync({
@@ -69,9 +76,7 @@ export default function CaptureScreen() {
         exif: false,
       });
 
-      // 1) Hvis vi får en brukbar uri (native, eller noen web-case), bruk den
       if (raw?.uri) {
-        // For web: komprimer/resize litt slik at lagring og visning blir stabilt
         if (Platform.OS === "web") {
           setStatus("Optimaliserer…");
           const manipulated = await ImageManipulator.manipulateAsync(
@@ -83,7 +88,6 @@ export default function CaptureScreen() {
           if (manipulated.base64) {
             setPhotoUri(`data:image/jpeg;base64,${manipulated.base64}`);
           } else {
-            // fallback: bruk uri hvis base64 ikke finnes
             setPhotoUri(manipulated.uri);
           }
         } else {
@@ -94,7 +98,6 @@ export default function CaptureScreen() {
         return;
       }
 
-      // 2) Web fallback: base64 direkte fra kamera
       if (wantBase64 && raw?.base64) {
         setPhotoUri(`data:image/jpeg;base64,${raw.base64}`);
         setStatus("");
@@ -181,7 +184,8 @@ export default function CaptureScreen() {
             resizeMode="cover"
           />
         ) : (
-          <View style={{ height: 360 }}>
+          // pointerEvents="none" prevents the camera element from capturing touches on mobile web
+          <View style={{ height: 360 }} pointerEvents="none">
             <CameraView ref={camRef} style={{ flex: 1 }} facing="back" />
           </View>
         )}
