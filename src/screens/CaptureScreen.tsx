@@ -23,11 +23,14 @@ function makeId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+type LocPermissionState = "unknown" | "granted" | "denied";
+
 export default function CaptureScreen({ isActive }: { isActive: boolean }) {
   const camRef = useRef<CameraView>(null);
 
   const [camPerm, requestCamPerm] = useCameraPermissions();
-  const [locGranted, setLocGranted] = useState<boolean>(false);
+
+  const [locPerm, setLocPerm] = useState<LocPermissionState>("unknown");
 
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [rating, setRating] = useState<Rating | null>(null);
@@ -36,30 +39,41 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string>("");
 
+  const [camReady, setCamReady] = useState(false);
+
   const canSave = useMemo(
     () => !!photoUri && !!rating && !busy,
     [photoUri, rating, busy]
   );
 
+  // Reset transient status when coming back to this tab
   useEffect(() => {
-    (async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        setLocGranted(status === "granted");
-      } catch {
-        setLocGranted(false);
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    if (isActive) setStatus("");
+    if (isActive) {
+      setStatus("");
+      // If we show camera again, we want a fresh "ready" signal
+      setCamReady(false);
+    }
   }, [isActive]);
 
   const ensureCamera = async () => {
     if (camPerm?.granted) return true;
     const res = await requestCamPerm();
     return res.granted;
+  };
+
+  const ensureLocationPermission = async (): Promise<boolean> => {
+    if (locPerm === "granted") return true;
+    if (locPerm === "denied") return false;
+
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      const ok = status === "granted";
+      setLocPerm(ok ? "granted" : "denied");
+      return ok;
+    } catch {
+      setLocPerm("denied");
+      return false;
+    }
   };
 
   const onTakePhoto = async () => {
@@ -76,10 +90,11 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
       const cam = camRef.current;
       if (!cam) throw new Error("Camera ref missing");
 
+      // Web: prefer base64 for stable preview + storage
       const wantBase64 = Platform.OS === "web";
 
       const raw = await cam.takePictureAsync({
-        quality: wantBase64 ? 0.55 : 0.85,
+        quality: wantBase64 ? 0.5 : 0.85,
         base64: wantBase64,
         exif: false,
       });
@@ -89,8 +104,13 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
           setStatus("Optimaliserer…");
           const manipulated = await ImageManipulator.manipulateAsync(
             raw.uri,
-            [{ resize: { width: 1080 } }],
-            { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+            // Slightly smaller than before => faster + less storage on web
+            [{ resize: { width: 900 } }],
+            {
+              compress: 0.6,
+              format: ImageManipulator.SaveFormat.JPEG,
+              base64: true,
+            }
           );
 
           if (manipulated.base64) {
@@ -132,7 +152,10 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
       | { lat: number; lng: number; accuracyM?: number }
       | undefined = undefined;
 
-    if (locGranted) {
+    // Ask for location only when saving (much faster app start)
+    const locOk = await ensureLocationPermission();
+
+    if (locOk) {
       try {
         const pos = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced,
@@ -143,7 +166,7 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
           accuracyM: pos.coords.accuracy ?? undefined,
         };
       } catch {
-        // ok
+        // ok: save without location if it fails
       }
     }
 
@@ -174,6 +197,12 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
     }
   };
 
+  // Only mount the camera when:
+  // - Capture tab is active
+  // - we don't already have a photo preview
+  // This reduces “hanging” and background camera work.
+  const shouldShowCamera = isActive && !photoUri;
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
@@ -183,7 +212,7 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
         style={{ flex: 1 }}
         contentContainerStyle={{
           paddingHorizontal: 16,
-          paddingBottom: 28, // base padding
+          paddingBottom: 28,
         }}
         keyboardShouldPersistTaps="handled"
       >
@@ -203,8 +232,55 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
               resizeMode="cover"
             />
           ) : (
-            <View style={{ height: 360 }} pointerEvents="none">
-              <CameraView ref={camRef} style={{ flex: 1 }} facing="back" />
+            <View style={{ height: 360 }}>
+              {shouldShowCamera ? (
+                <>
+                  {/* pointerEvents none => camera won't steal touches on mobile web */}
+                  <View style={{ flex: 1 }} pointerEvents="none">
+                    <CameraView
+                      ref={camRef}
+                      style={{ flex: 1 }}
+                      facing="back"
+                      onCameraReady={() => setCamReady(true)}
+                    />
+                  </View>
+
+                  {!camReady ? (
+                    <View
+                      style={{
+                        position: "absolute",
+                        left: 0,
+                        right: 0,
+                        top: 0,
+                        bottom: 0,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        backgroundColor: "rgba(0,0,0,0.25)",
+                      }}
+                      pointerEvents="none"
+                    >
+                      <Text style={{ color: theme.text, fontWeight: "900" }}>
+                        Starter kamera…
+                      </Text>
+                      <Text style={{ color: theme.muted, marginTop: 6 }}>
+                        (Mobil-web kan være tregere her)
+                      </Text>
+                    </View>
+                  ) : null}
+                </>
+              ) : (
+                <View
+                  style={{
+                    flex: 1,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Text style={{ color: theme.muted }}>
+                    Kamera pauset
+                  </Text>
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -213,7 +289,7 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
           <PrimaryButton
             title={photoUri ? "Ta nytt bilde" : "Ta bilde"}
             onPress={onTakePhoto}
-            disabled={busy}
+            disabled={busy || (shouldShowCamera && !camReady)}
           />
         </View>
 
@@ -226,7 +302,6 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
             Likte jeg dette?
           </Text>
 
-          {/* Make selection visibly obvious */}
           <View
             style={{
               borderRadius: 16,
@@ -241,7 +316,13 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
           <Text style={{ color: theme.muted, marginTop: 8 }}>
             Valgt:{" "}
             <Text style={{ color: theme.text, fontWeight: "800" }}>
-              {rating === "yes" ? "Ja" : rating === "neutral" ? "Nøytral" : rating === "no" ? "Nei" : "—"}
+              {rating === "yes"
+                ? "Ja"
+                : rating === "neutral"
+                ? "Nøytral"
+                : rating === "no"
+                ? "Nei"
+                : "—"}
             </Text>
           </Text>
         </View>
@@ -271,13 +352,17 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
         </View>
 
         <View style={{ marginTop: 14 }}>
-          <PrimaryButton title="Lagre øyeblikk" onPress={onSave} disabled={!canSave} />
+          <PrimaryButton
+            title="Lagre øyeblikk"
+            onPress={onSave}
+            disabled={!canSave}
+          />
           <Text style={{ color: theme.muted, marginTop: 8 }}>
-            Tid lagres alltid. GPS lagres hvis tillatt.
+            Tid lagres alltid. GPS spør vi om først ved lagring.
           </Text>
         </View>
 
-        {/* Extra space so the bottom tab bar never hides the save button */}
+        {/* Extra space so bottom tab bar never hides the save button */}
         <View style={{ height: 90 }} />
       </ScrollView>
     </KeyboardAvoidingView>
