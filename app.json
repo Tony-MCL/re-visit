@@ -3,8 +3,10 @@
     "name": "Re:visit?",
     "slug": "re-visit",
     "version": "0.0.1",
+    "experiments": {
+      "baseUrl": "/re-visit"
+    },
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "splash": {
       "resizeMode": "contain",
