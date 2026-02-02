@@ -44,19 +44,22 @@ export const en = {
     title: "Log",
     loading: "Loading…",
     entries: "entries",
-    refresh: "Refresh",
-    clear: "Clear",
 
     emptyTitle: "No entries yet",
     emptyMsg: "Go to “Capture”, take a photo, and save your first moment.",
 
-    clearTitle: "Clear log",
-    clearMsg: "This deletes all local entries for this profile.",
-    cancel: "Cancel",
-    deleteAll: "Delete all",
-
     noGps: "(No GPS)",
     rating: { yes: "🙂 Yes", neutral: "😐 Neutral", no: "🙁 No" },
+
+    // NEW: edit + delete UI
+    edit: "Edit",
+    done: "Done",
+    delete: "Delete",
+
+    deleteDialogTitle: "Delete entry",
+    deleteDialogMsg: "This deletes the entry from this device. This cannot be undone.",
+    cancel: "Cancel",
+    confirmDelete: "Delete",
   },
 
   language: {
