@@ -16,6 +16,9 @@ import { initI18n, getLang, setLang, t } from "./src/i18n/i18n";
 import Splash from "./src/components/Splash";
 import type { ProfileId } from "./src/types/entry";
 
+import PaywallModal from "./src/components/PaywallModal";
+import { getPlan, setPlan, type Plan } from "./src/entitlements/plan";
+
 type Tab = "capture" | "log";
 
 const PROFILE_KEY = "revisit.profile.v1";
@@ -30,14 +33,29 @@ export default function App() {
 
   const [activeProfile, setActiveProfile] = useState<ProfileId>("private");
 
+  // plan (free/pro)
+  const [plan, setPlanState] = useState<Plan>("free");
+
+  // paywall modal (for profile lock)
+  const [paywallOpen, setPaywallOpen] = useState(false);
+
   useEffect(() => {
     (async () => {
       await initI18n();
       setLangState(getLang());
 
+      const storedPlan = await getPlan();
+      setPlanState(storedPlan);
+
       const storedProfile = await AsyncStorage.getItem(PROFILE_KEY);
       if (storedProfile === "private" || storedProfile === "work") {
-        setActiveProfile(storedProfile);
+        // If plan is free and stored profile is "work", force back to private.
+        if (storedPlan === "free" && storedProfile === "work") {
+          setActiveProfile("private");
+          await AsyncStorage.setItem(PROFILE_KEY, "private");
+        } else {
+          setActiveProfile(storedProfile);
+        }
       }
 
       setReady(true);
@@ -46,6 +64,16 @@ export default function App() {
       window.setTimeout(() => setShowSplash(false), 1600);
     })();
   }, []);
+
+  // If plan flips to free while user is on work, force back to private.
+  useEffect(() => {
+    (async () => {
+      if (plan === "free" && activeProfile === "work") {
+        setActiveProfile("private");
+        await AsyncStorage.setItem(PROFILE_KEY, "private");
+      }
+    })();
+  }, [plan, activeProfile]);
 
   const headerTitle = useMemo(() => {
     return tab === "capture" ? t("app.title") : t("log.title");
@@ -57,8 +85,25 @@ export default function App() {
   };
 
   const setProfile = async (p: ProfileId) => {
+    // Gate work profile behind Pro
+    if (p === "work" && plan === "free") {
+      setPaywallOpen(true);
+      return;
+    }
+
     setActiveProfile(p);
     await AsyncStorage.setItem(PROFILE_KEY, p);
+  };
+
+  const setPlanAndPersist = async (next: Plan) => {
+    await setPlan(next);
+    setPlanState(next);
+
+    // If switching to free, we also ensure profile is private
+    if (next === "free" && activeProfile === "work") {
+      setActiveProfile("private");
+      await AsyncStorage.setItem(PROFILE_KEY, "private");
+    }
   };
 
   if (!ready) {
@@ -102,11 +147,15 @@ export default function App() {
               active={activeProfile === "private"}
               label={t("app.profiles.private")}
               onPress={() => setProfile("private")}
+              showLock={false}
             />
+
+            {/* Work: lock icon if free */}
             <ProfilePill
               active={activeProfile === "work"}
               label={t("app.profiles.work")}
               onPress={() => setProfile("work")}
+              showLock={plan === "free"}
             />
           </View>
 
@@ -130,24 +179,16 @@ export default function App() {
           </Pressable>
         </View>
 
-        <Text style={{ color: theme.muted, marginTop: 6 }}>
-          {t("app.subtitle")}
-        </Text>
+        <Text style={{ color: theme.muted, marginTop: 6 }}>{t("app.subtitle")}</Text>
       </View>
 
       <View style={{ flex: 1 }}>
         <View style={{ flex: 1, display: tab === "capture" ? "flex" : "none" }}>
-          <CaptureScreen
-            isActive={tab === "capture"}
-            activeProfile={activeProfile}
-          />
+          <CaptureScreen isActive={tab === "capture"} activeProfile={activeProfile} />
         </View>
 
         <View style={{ flex: 1, display: tab === "log" ? "flex" : "none" }}>
-          <LogScreen
-            isActive={tab === "log"}
-            activeProfile={activeProfile}
-          />
+          <LogScreen isActive={tab === "log"} activeProfile={activeProfile} />
         </View>
       </View>
 
@@ -218,6 +259,25 @@ export default function App() {
               />
             </View>
 
+            {/* DEV: plan toggle */}
+            <View style={{ height: 16 }} />
+            <Text style={{ color: theme.muted, fontWeight: "800" }}>
+              {t("dev.title")}
+            </Text>
+
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+              <MenuChoice
+                label={t("dev.setFree")}
+                active={plan === "free"}
+                onPress={() => setPlanAndPersist("free")}
+              />
+              <MenuChoice
+                label={t("dev.setPro")}
+                active={plan === "pro"}
+                onPress={() => setPlanAndPersist("pro")}
+              />
+            </View>
+
             <View style={{ height: 12 }} />
 
             <Pressable
@@ -237,6 +297,18 @@ export default function App() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Paywall for locked Work profile */}
+      <PaywallModal
+        visible={paywallOpen}
+        title={t("capture.lockedProfileTitle")}
+        message={t("capture.lockedProfileMsg")}
+        primaryLabel={t("paywall.primary")}
+        secondaryLabel={t("paywall.secondary")}
+        onPrimary={() => setPaywallOpen(false)} // later: open pricing screen
+        onSecondary={() => setPaywallOpen(false)}
+        onClose={() => setPaywallOpen(false)}
+      />
 
       {/* Splash overlay */}
       {showSplash ? (
@@ -321,10 +393,12 @@ function ProfilePill({
   active,
   label,
   onPress,
+  showLock,
 }: {
   active: boolean;
   label: string;
   onPress: () => void;
+  showLock?: boolean;
 }) {
   return (
     <Pressable
@@ -335,11 +409,16 @@ function ProfilePill({
         backgroundColor: active ? theme.card : "transparent",
         borderRightWidth: 1,
         borderRightColor: theme.border,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        opacity: showLock ? 0.8 : 1,
       }}
     >
       <Text style={{ color: active ? theme.text : theme.muted, fontWeight: "900" }}>
         {label}
       </Text>
+      {showLock ? <Text style={{ fontWeight: "900" }}>🔒</Text> : null}
     </Pressable>
   );
 }
