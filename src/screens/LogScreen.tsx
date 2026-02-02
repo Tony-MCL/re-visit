@@ -68,28 +68,23 @@ export default function LogScreen({
 
   useEffect(() => {
     if (isActive) refresh();
-    // when profile changes, exit edit mode (avoids confusion)
     setEditMode(false);
   }, [activeProfile, isActive, refresh]);
 
   const empty = useMemo(() => entries.length === 0, [entries.length]);
 
   const onDelete = (entry: VisitEntry) => {
-    Alert.alert(
-      "Slett innlegg",
-      "Dette sletter innlegget fra denne enheten. Kan ikke angres.",
-      [
-        { text: "Avbryt", style: "cancel" },
-        {
-          text: "Slett",
-          style: "destructive",
-          onPress: async () => {
-            await deleteOne(entry.id);
-            await refresh();
-          },
+    Alert.alert(t("log.deleteDialogTitle"), t("log.deleteDialogMsg"), [
+      { text: t("log.cancel"), style: "cancel" },
+      {
+        text: t("log.confirmDelete"),
+        style: "destructive",
+        onPress: async () => {
+          await deleteOne(entry.id);
+          await refresh();
         },
-      ]
-    );
+      },
+    ]);
   };
 
   return (
@@ -101,7 +96,7 @@ export default function LogScreen({
 
         <Pressable onPress={() => setEditMode((v) => !v)} style={{ padding: 10 }}>
           <Text style={{ color: theme.accent, fontWeight: "900" }}>
-            {editMode ? "Ferdig" : "Rediger"}
+            {editMode ? t("log.done") : t("log.edit")}
           </Text>
         </Pressable>
       </View>
@@ -153,7 +148,9 @@ export default function LogScreen({
                       borderColor: "rgba(255,255,255,0.25)",
                     }}
                   >
-                    <Text style={{ color: "white", fontWeight: "900" }}>Slett</Text>
+                    <Text style={{ color: "white", fontWeight: "900" }}>
+                      {t("log.delete")}
+                    </Text>
                   </Pressable>
                 ) : null}
               </View>
