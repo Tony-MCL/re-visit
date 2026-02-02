@@ -16,7 +16,7 @@ import * as ImageManipulator from "expo-image-manipulator";
 import PrimaryButton from "../components/PrimaryButton";
 import SegmentedRating from "../components/SegmentedRating";
 import { theme } from "../ui/theme";
-import type { Rating, VisitEntry } from "../types/entry";
+import type { ProfileId, Rating, VisitEntry } from "../types/entry";
 import { addEntry } from "../storage/entries";
 import { t } from "../i18n/i18n";
 
@@ -26,7 +26,13 @@ function makeId() {
 
 type LocPermissionState = "unknown" | "granted" | "denied";
 
-export default function CaptureScreen({ isActive }: { isActive: boolean }) {
+export default function CaptureScreen({
+  isActive,
+  activeProfile,
+}: {
+  isActive: boolean;
+  activeProfile: ProfileId;
+}) {
   const camRef = useRef<CameraView>(null);
 
   const [camPerm, requestCamPerm] = useCameraPermissions();
@@ -46,12 +52,21 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
     [photoUri, rating, busy]
   );
 
+  // Reset transient status when coming back to this tab
   useEffect(() => {
     if (isActive) {
       setStatus("");
       setCamReady(false);
     }
   }, [isActive]);
+
+  // When switching profile, clear current draft so user doesn't accidentally save to wrong profile
+  useEffect(() => {
+    setPhotoUri(null);
+    setRating(null);
+    setComment("");
+    setStatus("");
+  }, [activeProfile]);
 
   const ensureCamera = async () => {
     if (camPerm?.granted) return true;
@@ -88,6 +103,7 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
       const cam = camRef.current;
       if (!cam) throw new Error("Camera ref missing");
 
+      // Web: prefer base64 for stable preview + storage
       const wantBase64 = Platform.OS === "web";
 
       const raw = await cam.takePictureAsync({
@@ -148,6 +164,7 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
       | { lat: number; lng: number; accuracyM?: number }
       | undefined = undefined;
 
+    // Ask for location only when saving (much faster app start)
     const locOk = await ensureLocationPermission();
 
     if (locOk) {
@@ -161,7 +178,7 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
           accuracyM: pos.coords.accuracy ?? undefined,
         };
       } catch {
-        // ok
+        // ok: save without location if it fails
       }
     }
 
@@ -172,6 +189,7 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
       rating,
       comment: comment.trim() ? comment.trim() : undefined,
       location: loc,
+      profileId: activeProfile,
     };
 
     try {
@@ -192,6 +210,9 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
     }
   };
 
+  // Only mount the camera when:
+  // - Capture tab is active
+  // - we don't already have a photo preview
   const shouldShowCamera = isActive && !photoUri;
 
   return (
@@ -226,6 +247,7 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
             <View style={{ height: 360 }}>
               {shouldShowCamera ? (
                 <>
+                  {/* pointerEvents none => camera won't steal touches on mobile web */}
                   <View style={{ flex: 1 }} pointerEvents="none">
                     <CameraView
                       ref={camRef}
@@ -344,6 +366,7 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
           <Text style={{ color: theme.muted, marginTop: 8 }}>{t("capture.saveHint")}</Text>
         </View>
 
+        {/* Extra space so bottom tab bar never hides the save button */}
         <View style={{ height: 90 }} />
       </ScrollView>
     </KeyboardAvoidingView>
