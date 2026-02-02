@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { ProfileId, VisitEntry } from "../types/entry";
+import { normalizeCategoryId } from "../constants/categories";
 
 const KEY = "revisit.entries.v1";
 
@@ -7,14 +8,39 @@ type Stored = {
   entries: VisitEntry[];
 };
 
+function sanitize(e: any): VisitEntry | null {
+  if (!e || typeof e !== "object") return null;
+  if (!e.id || !e.createdAtIso || !e.photoUri || !e.rating || !e.profileId) return null;
+
+  return {
+    id: String(e.id),
+    createdAtIso: String(e.createdAtIso),
+    photoUri: String(e.photoUri),
+    rating: e.rating,
+    comment: typeof e.comment === "string" ? e.comment : undefined,
+    location:
+      e.location && typeof e.location === "object"
+        ? {
+            lat: Number(e.location.lat),
+            lng: Number(e.location.lng),
+            accuracyM:
+              e.location.accuracyM === undefined ? undefined : Number(e.location.accuracyM),
+          }
+        : undefined,
+    profileId: e.profileId,
+    categoryId: normalizeCategoryId(e.categoryId),
+  } as VisitEntry;
+}
+
 async function readAll(): Promise<Stored> {
   const raw = await AsyncStorage.getItem(KEY);
   if (!raw) return { entries: [] };
 
   try {
-    const parsed = JSON.parse(raw) as Stored;
-    if (!parsed || !Array.isArray(parsed.entries)) return { entries: [] };
-    return parsed;
+    const parsed = JSON.parse(raw) as any;
+    const arr = Array.isArray(parsed?.entries) ? parsed.entries : [];
+    const sanitized = arr.map(sanitize).filter(Boolean) as VisitEntry[];
+    return { entries: sanitized };
   } catch {
     return { entries: [] };
   }
