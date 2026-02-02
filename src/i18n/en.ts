@@ -107,4 +107,12 @@ export const en = {
     no: "NO",
     en: "EN",
   },
+
+  dev: {
+  title: "Developer",
+  plan: "Plan",
+  setFree: "Set Free",
+  setPro: "Set Pro",
+},
+
 } as const;
