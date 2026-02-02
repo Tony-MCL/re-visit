@@ -3,11 +3,12 @@ import { FlatList, Image, Pressable, Text, View, Alert } from "react-native";
 import { theme } from "../ui/theme";
 import type { VisitEntry } from "../types/entry";
 import { clearEntries, loadEntries } from "../storage/entries";
+import { t } from "../i18n/i18n";
 
 function ratingLabel(r: VisitEntry["rating"]) {
-  if (r === "yes") return "🙂 Ja";
-  if (r === "neutral") return "😐 Nøytral";
-  return "🙁 Nei";
+  if (r === "yes") return t("log.rating.yes");
+  if (r === "neutral") return t("log.rating.neutral");
+  return t("log.rating.no");
 }
 
 function prettyDate(iso: string) {
@@ -30,7 +31,6 @@ export default function LogScreen({ isActive }: { isActive: boolean }) {
     }
   }, []);
 
-  // Refresh whenever screen becomes active
   useEffect(() => {
     if (isActive) refresh();
   }, [isActive, refresh]);
@@ -38,44 +38,40 @@ export default function LogScreen({ isActive }: { isActive: boolean }) {
   const empty = useMemo(() => entries.length === 0, [entries.length]);
 
   const onClear = async () => {
-    Alert.alert(
-      "Tøm logg",
-      "Dette sletter alle lokale oppføringer på denne enheten.",
-      [
-        { text: "Avbryt", style: "cancel" },
-        {
-          text: "Slett alt",
-          style: "destructive",
-          onPress: async () => {
-            await clearEntries();
-            await refresh();
-          },
+    Alert.alert(t("log.clearTitle"), t("log.clearMsg"), [
+      { text: t("log.cancel"), style: "cancel" },
+      {
+        text: t("log.deleteAll"),
+        style: "destructive",
+        onPress: async () => {
+          await clearEntries();
+          await refresh();
         },
-      ]
-    );
+      },
+    ]);
   };
 
   return (
     <View style={{ flex: 1, paddingHorizontal: 16 }}>
       <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}>
         <Text style={{ color: theme.muted, flex: 1 }}>
-          {busy ? "Laster…" : `${entries.length} oppføringer`}
+          {busy ? t("log.loading") : `${entries.length} ${t("log.entries")}`}
         </Text>
         <Pressable onPress={refresh} style={{ padding: 10 }}>
-          <Text style={{ color: theme.accent, fontWeight: "800" }}>Oppdater</Text>
+          <Text style={{ color: theme.accent, fontWeight: "800" }}>{t("log.refresh")}</Text>
         </Pressable>
         <Pressable onPress={onClear} style={{ padding: 10 }}>
-          <Text style={{ color: theme.danger, fontWeight: "800" }}>Tøm</Text>
+          <Text style={{ color: theme.danger, fontWeight: "800" }}>{t("log.clear")}</Text>
         </Pressable>
       </View>
 
       {empty ? (
         <View style={{ paddingTop: 40 }}>
           <Text style={{ color: theme.text, fontWeight: "800", fontSize: 16 }}>
-            Ingen oppføringer ennå
+            {t("log.emptyTitle")}
           </Text>
           <Text style={{ color: theme.muted, marginTop: 8 }}>
-            Gå til “Fang”, ta et bilde og lagre første øyeblikk.
+            {t("log.emptyMsg")}
           </Text>
         </View>
       ) : (
@@ -115,7 +111,7 @@ export default function LogScreen({ isActive }: { isActive: boolean }) {
                   </Text>
                 ) : (
                   <Text style={{ color: theme.muted, marginTop: 6 }}>
-                    (Ingen GPS)
+                    {t("log.noGps")}
                   </Text>
                 )}
 
