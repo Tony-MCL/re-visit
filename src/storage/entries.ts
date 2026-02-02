@@ -82,3 +82,8 @@ export async function clearEntries(profileId?: ProfileId) {
   const kept = data.entries.filter((e) => e.profileId !== profileId);
   await writeAll({ entries: kept });
 }
+
+export async function countAllEntries(): Promise<number> {
+  const data = await readAll();
+  return data.entries.length;
+}
