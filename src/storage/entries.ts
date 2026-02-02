@@ -1,31 +1,52 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { VisitEntry } from "../types/entry";
+import type { ProfileId, VisitEntry } from "../types/entry";
 
 const KEY = "revisit.entries.v1";
 
-export async function loadEntries(): Promise<VisitEntry[]> {
+type Stored = {
+  entries: VisitEntry[];
+};
+
+async function readAll(): Promise<Stored> {
   const raw = await AsyncStorage.getItem(KEY);
-  if (!raw) return [];
+  if (!raw) return { entries: [] };
+
   try {
-    const parsed = JSON.parse(raw) as VisitEntry[];
-    if (!Array.isArray(parsed)) return [];
+    const parsed = JSON.parse(raw) as Stored;
+    if (!parsed || !Array.isArray(parsed.entries)) return { entries: [] };
     return parsed;
   } catch {
-    return [];
+    return { entries: [] };
   }
 }
 
-export async function saveEntries(entries: VisitEntry[]): Promise<void> {
-  await AsyncStorage.setItem(KEY, JSON.stringify(entries));
+async function writeAll(data: Stored) {
+  await AsyncStorage.setItem(KEY, JSON.stringify(data));
 }
 
-export async function addEntry(entry: VisitEntry): Promise<VisitEntry[]> {
-  const entries = await loadEntries();
-  const next = [entry, ...entries];
-  await saveEntries(next);
-  return next;
+export async function addEntry(entry: VisitEntry) {
+  const data = await readAll();
+  const next = [entry, ...data.entries];
+  await writeAll({ entries: next });
 }
 
-export async function clearEntries(): Promise<void> {
-  await AsyncStorage.removeItem(KEY);
+export async function loadEntries(profileId?: ProfileId): Promise<VisitEntry[]> {
+  const data = await readAll();
+  const sorted = [...data.entries].sort((a, b) =>
+    a.createdAtIso < b.createdAtIso ? 1 : -1
+  );
+
+  if (!profileId) return sorted;
+  return sorted.filter((e) => e.profileId === profileId);
+}
+
+export async function clearEntries(profileId?: ProfileId) {
+  if (!profileId) {
+    await writeAll({ entries: [] });
+    return;
+  }
+
+  const data = await readAll();
+  const kept = data.entries.filter((e) => e.profileId !== profileId);
+  await writeAll({ entries: kept });
 }
