@@ -18,6 +18,7 @@ import SegmentedRating from "../components/SegmentedRating";
 import { theme } from "../ui/theme";
 import type { Rating, VisitEntry } from "../types/entry";
 import { addEntry } from "../storage/entries";
+import { t } from "../i18n/i18n";
 
 function makeId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -29,7 +30,6 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
   const camRef = useRef<CameraView>(null);
 
   const [camPerm, requestCamPerm] = useCameraPermissions();
-
   const [locPerm, setLocPerm] = useState<LocPermissionState>("unknown");
 
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -46,11 +46,9 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
     [photoUri, rating, busy]
   );
 
-  // Reset transient status when coming back to this tab
   useEffect(() => {
     if (isActive) {
       setStatus("");
-      // If we show camera again, we want a fresh "ready" signal
       setCamReady(false);
     }
   }, [isActive]);
@@ -79,18 +77,17 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
   const onTakePhoto = async () => {
     const ok = await ensureCamera();
     if (!ok) {
-      Alert.alert("Kamera", "Du må gi kameratilgang for å ta bilde.");
+      Alert.alert(t("capture.cameraTitle"), t("capture.cameraPerm"));
       return;
     }
 
     setBusy(true);
-    setStatus("Tar bilde…");
+    setStatus(t("capture.statusTaking"));
 
     try {
       const cam = camRef.current;
       if (!cam) throw new Error("Camera ref missing");
 
-      // Web: prefer base64 for stable preview + storage
       const wantBase64 = Platform.OS === "web";
 
       const raw = await cam.takePictureAsync({
@@ -101,10 +98,9 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
 
       if (raw?.uri) {
         if (Platform.OS === "web") {
-          setStatus("Optimaliserer…");
+          setStatus(t("capture.statusOptimizing"));
           const manipulated = await ImageManipulator.manipulateAsync(
             raw.uri,
-            // Slightly smaller than before => faster + less storage on web
             [{ resize: { width: 900 } }],
             {
               compress: 0.6,
@@ -136,7 +132,7 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
     } catch (e) {
       console.error(e);
       setStatus("");
-      Alert.alert("Feil", "Kunne ikke ta bilde. Prøv igjen.");
+      Alert.alert(t("capture.errTitle"), t("capture.errTakePhoto"));
     } finally {
       setBusy(false);
     }
@@ -146,13 +142,12 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
     if (!photoUri || !rating) return;
 
     setBusy(true);
-    setStatus("Lagrer…");
+    setStatus(t("capture.statusSaving"));
 
     let loc:
       | { lat: number; lng: number; accuracyM?: number }
       | undefined = undefined;
 
-    // Ask for location only when saving (much faster app start)
     const locOk = await ensureLocationPermission();
 
     if (locOk) {
@@ -166,7 +161,7 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
           accuracyM: pos.coords.accuracy ?? undefined,
         };
       } catch {
-        // ok: save without location if it fails
+        // ok
       }
     }
 
@@ -187,20 +182,16 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
       setComment("");
       setStatus("");
 
-      Alert.alert("Lagret", "Opplevelsen er lagret i loggen din.");
+      Alert.alert(t("capture.savedTitle"), t("capture.savedMsg"));
     } catch (e) {
       console.error(e);
       setStatus("");
-      Alert.alert("Feil", "Kunne ikke lagre opplevelsen.");
+      Alert.alert(t("capture.errTitle"), t("capture.errSave"));
     } finally {
       setBusy(false);
     }
   };
 
-  // Only mount the camera when:
-  // - Capture tab is active
-  // - we don't already have a photo preview
-  // This reduces “hanging” and background camera work.
   const shouldShowCamera = isActive && !photoUri;
 
   return (
@@ -235,7 +226,6 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
             <View style={{ height: 360 }}>
               {shouldShowCamera ? (
                 <>
-                  {/* pointerEvents none => camera won't steal touches on mobile web */}
                   <View style={{ flex: 1 }} pointerEvents="none">
                     <CameraView
                       ref={camRef}
@@ -260,10 +250,10 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
                       pointerEvents="none"
                     >
                       <Text style={{ color: theme.text, fontWeight: "900" }}>
-                        Starter kamera…
+                        {t("capture.startingCamera")}
                       </Text>
                       <Text style={{ color: theme.muted, marginTop: 6 }}>
-                        (Mobil-web kan være tregere her)
+                        {t("capture.startingCameraHint")}
                       </Text>
                     </View>
                   ) : null}
@@ -276,9 +266,7 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
                     justifyContent: "center",
                   }}
                 >
-                  <Text style={{ color: theme.muted }}>
-                    Kamera pauset
-                  </Text>
+                  <Text style={{ color: theme.muted }}>Paused</Text>
                 </View>
               )}
             </View>
@@ -287,7 +275,7 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
 
         <View style={{ marginTop: 12 }}>
           <PrimaryButton
-            title={photoUri ? "Ta nytt bilde" : "Ta bilde"}
+            title={photoUri ? t("capture.retakePhoto") : t("capture.takePhoto")}
             onPress={onTakePhoto}
             disabled={busy || (shouldShowCamera && !camReady)}
           />
@@ -299,7 +287,7 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
 
         <View style={{ marginTop: 14 }}>
           <Text style={{ color: theme.text, fontWeight: "800", marginBottom: 8 }}>
-            Likte jeg dette?
+            {t("capture.ratingQ")}
           </Text>
 
           <View
@@ -314,14 +302,14 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
           </View>
 
           <Text style={{ color: theme.muted, marginTop: 8 }}>
-            Valgt:{" "}
+            {t("capture.selected")}{" "}
             <Text style={{ color: theme.text, fontWeight: "800" }}>
               {rating === "yes"
-                ? "Ja"
+                ? t("capture.rating.yes")
                 : rating === "neutral"
-                ? "Nøytral"
+                ? t("capture.rating.neutral")
                 : rating === "no"
-                ? "Nei"
+                ? t("capture.rating.no")
                 : "—"}
             </Text>
           </Text>
@@ -329,12 +317,12 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
 
         <View style={{ marginTop: 14 }}>
           <Text style={{ color: theme.text, fontWeight: "800", marginBottom: 8 }}>
-            Valgfri kommentar (1–2 linjer)
+            {t("capture.commentLabel")}
           </Text>
           <TextInput
             value={comment}
             onChangeText={setComment}
-            placeholder="Skriv kort..."
+            placeholder={t("capture.commentPlaceholder")}
             placeholderTextColor={theme.muted}
             style={{
               backgroundColor: theme.surface,
@@ -352,17 +340,10 @@ export default function CaptureScreen({ isActive }: { isActive: boolean }) {
         </View>
 
         <View style={{ marginTop: 14 }}>
-          <PrimaryButton
-            title="Lagre øyeblikk"
-            onPress={onSave}
-            disabled={!canSave}
-          />
-          <Text style={{ color: theme.muted, marginTop: 8 }}>
-            Tid lagres alltid. GPS spør vi om først ved lagring.
-          </Text>
+          <PrimaryButton title={t("capture.save")} onPress={onSave} disabled={!canSave} />
+          <Text style={{ color: theme.muted, marginTop: 8 }}>{t("capture.saveHint")}</Text>
         </View>
 
-        {/* Extra space so bottom tab bar never hides the save button */}
         <View style={{ height: 90 }} />
       </ScrollView>
     </KeyboardAvoidingView>
