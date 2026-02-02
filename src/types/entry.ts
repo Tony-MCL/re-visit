@@ -1,5 +1,6 @@
-export type Rating = "yes" | "neutral" | "no";
+import type { CategoryId } from "../constants/categories";
 
+export type Rating = "yes" | "neutral" | "no";
 export type ProfileId = "private" | "work";
 
 export type VisitEntry = {
@@ -16,6 +17,8 @@ export type VisitEntry = {
     accuracyM?: number;
   };
 
-  // NEW: which "life" this belongs to
   profileId: ProfileId;
+
+  // NEW
+  categoryId: CategoryId;
 };
