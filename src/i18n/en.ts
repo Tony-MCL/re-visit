@@ -50,6 +50,19 @@ export const en = {
 
     cameraTitle: "Camera",
     cameraPerm: "Camera permission is required to take a photo.",
+
+    // NEW: limits/paywall
+    limitWarnTitle: "Heads up",
+    limitWarnMsg:
+      "You’re nearing the free limit. When you reach {{max}}, you’ll need Pro to save more.",
+    limitHardTitle: "Limit reached",
+    limitHardMsg:
+      "You’ve reached the free limit ({{max}} entries). Upgrade to save more.",
+    lockedProfileTitle: "Work profile is Pro",
+    lockedProfileMsg:
+      "The Work profile is available in Pro. Upgrade to use multiple profiles.",
+    maybeLater: "Later",
+    learnMore: "See Pro",
   },
 
   log: {
@@ -78,6 +91,15 @@ export const en = {
     apply: "Apply",
     clearFilter: "Reset",
     category: "Category",
+
+    // NEW: work profile locked message
+    lockedTitle: "Work profile is Pro",
+    lockedMsg: "Upgrade to Pro to use multiple profiles.",
+  },
+
+  paywall: {
+    primary: "See Pro",
+    secondary: "Later",
   },
 
   language: {
