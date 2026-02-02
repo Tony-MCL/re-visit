@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { SafeAreaView, View, Text, Pressable } from "react-native";
+import { SafeAreaView, View, Text, Pressable, Modal } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import CaptureScreen from "./src/screens/CaptureScreen";
 import LogScreen from "./src/screens/LogScreen";
@@ -12,6 +12,8 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("capture");
   const [lang, setLangState] = useState<"no" | "en">("no");
   const [ready, setReady] = useState(false);
+
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -30,14 +32,15 @@ export default function App() {
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
         <StatusBar style="light" />
         <View style={{ padding: 16 }}>
-          <Text style={{ color: theme.text, fontWeight: "800" }}>Loading…</Text>
+          <Text style={{ color: theme.text, fontWeight: "800" }}>
+            {t("log.loading")}
+          </Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  const toggleLang = async () => {
-    const next = lang === "no" ? "en" : "no";
+  const chooseLang = async (next: "no" | "en") => {
     await setLang(next);
     setLangState(next);
   };
@@ -45,32 +48,40 @@ export default function App() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
       <StatusBar style="light" />
+
       <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12 }}>
         <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <Text style={{ color: theme.text, fontSize: 20, fontWeight: "700", flex: 1 }}>
+          <Text
+            style={{
+              color: theme.text,
+              fontSize: 20,
+              fontWeight: "700",
+              flex: 1,
+            }}
+          >
             {headerTitle}
           </Text>
 
           <Pressable
-            onPress={toggleLang}
+            onPress={() => setMenuOpen(true)}
             style={{
-              paddingVertical: 6,
-              paddingHorizontal: 10,
-              borderRadius: 999,
+              width: 40,
+              height: 36,
+              borderRadius: 12,
               borderWidth: 1,
               borderColor: theme.border,
               backgroundColor: theme.surface,
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
-            <Text style={{ color: theme.text, fontWeight: "900" }}>
-              {lang === "no" ? t("language.no") : t("language.en")}
+            <Text style={{ color: theme.text, fontWeight: "900", fontSize: 18 }}>
+              ☰
             </Text>
           </Pressable>
         </View>
 
-        <Text style={{ color: theme.muted, marginTop: 6 }}>
-          {t("app.subtitle")}
-        </Text>
+        <Text style={{ color: theme.muted, marginTop: 6 }}>{t("app.subtitle")}</Text>
       </View>
 
       <View style={{ flex: 1 }}>
@@ -98,6 +109,72 @@ export default function App() {
           {t("app.tabs.log")}
         </TabButton>
       </View>
+
+      {/* Hamburger menu */}
+      <Modal transparent visible={menuOpen} animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+        <Pressable
+          onPress={() => setMenuOpen(false)}
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.55)",
+            padding: 16,
+            justifyContent: "flex-start",
+          }}
+        >
+          <Pressable
+            onPress={() => {}}
+            style={{
+              alignSelf: "flex-end",
+              width: 280,
+              backgroundColor: theme.card,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: theme.border,
+              padding: 14,
+            }}
+          >
+            <Text style={{ color: theme.text, fontWeight: "900", fontSize: 16 }}>
+              {t("app.menu.title")}
+            </Text>
+
+            <View style={{ height: 12 }} />
+
+            <Text style={{ color: theme.muted, fontWeight: "800" }}>
+              {t("language.label")}
+            </Text>
+
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+              <MenuChoice
+                label={t("language.no")}
+                active={lang === "no"}
+                onPress={() => chooseLang("no")}
+              />
+              <MenuChoice
+                label={t("language.en")}
+                active={lang === "en"}
+                onPress={() => chooseLang("en")}
+              />
+            </View>
+
+            <View style={{ height: 12 }} />
+
+            <Pressable
+              onPress={() => setMenuOpen(false)}
+              style={{
+                marginTop: 6,
+                paddingVertical: 10,
+                borderRadius: 12,
+                backgroundColor: theme.surface,
+                borderWidth: 1,
+                borderColor: theme.border,
+                alignItems: "center",
+              }}
+            >
+              <Text style={{ color: theme.text, fontWeight: "900" }}>OK</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -128,6 +205,35 @@ function TabButton({
         }}
       >
         {children}
+      </Text>
+    </Pressable>
+  );
+}
+
+function MenuChoice({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        flex: 1,
+        paddingVertical: 10,
+        borderRadius: 12,
+        borderWidth: active ? 2 : 1,
+        borderColor: active ? theme.accent : theme.border,
+        backgroundColor: active ? theme.surface : "transparent",
+        alignItems: "center",
+      }}
+    >
+      <Text style={{ color: active ? theme.text : theme.muted, fontWeight: "900" }}>
+        {label}
       </Text>
     </Pressable>
   );
