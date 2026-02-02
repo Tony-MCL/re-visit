@@ -20,6 +20,7 @@ import { theme } from "../ui/theme";
 import type { ProfileId, Rating, VisitEntry } from "../types/entry";
 import { addEntry } from "../storage/entries";
 import { t } from "../i18n/i18n";
+import { CATEGORIES, type CategoryId } from "../constants/categories";
 
 function makeId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -43,6 +44,8 @@ export default function CaptureScreen({
   const [rating, setRating] = useState<Rating | null>(null);
   const [comment, setComment] = useState<string>("");
 
+  const [categoryId, setCategoryId] = useState<CategoryId>("other");
+
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string>("");
 
@@ -57,11 +60,11 @@ export default function CaptureScreen({
     setPhotoUri(null);
     setRating(null);
     setComment("");
+    setCategoryId("other");
     setStatus("");
     setCamReady(false);
   };
 
-  // Reset transient status when coming back to this tab
   useEffect(() => {
     if (isActive) {
       setStatus("");
@@ -69,7 +72,6 @@ export default function CaptureScreen({
     }
   }, [isActive]);
 
-  // When switching profile, clear current draft so user doesn't accidentally save to wrong profile
   useEffect(() => {
     resetCapture();
   }, [activeProfile]);
@@ -194,6 +196,7 @@ export default function CaptureScreen({
       comment: comment.trim() ? comment.trim() : undefined,
       location: loc,
       profileId: activeProfile,
+      categoryId,
     };
 
     try {
@@ -241,7 +244,6 @@ export default function CaptureScreen({
                 resizeMode="cover"
               />
 
-              {/* Small reset tab in corner */}
               <Pressable
                 onPress={resetCapture}
                 style={{
@@ -353,6 +355,52 @@ export default function CaptureScreen({
                 ? t("capture.rating.no")
                 : "—"}
             </Text>
+          </Text>
+        </View>
+
+        {/* Category picker */}
+        <View style={{ marginTop: 14 }}>
+          <Text style={{ color: theme.text, fontWeight: "800", marginBottom: 8 }}>
+            {t("capture.categoryLabel")}
+          </Text>
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={{ flexDirection: "row", gap: 10, paddingRight: 6 }}>
+              {CATEGORIES.map((c) => {
+                const active = c.id === categoryId;
+                return (
+                  <Pressable
+                    key={c.id}
+                    onPress={() => setCategoryId(c.id)}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 8,
+                      paddingHorizontal: 12,
+                      paddingVertical: 10,
+                      borderRadius: 999,
+                      borderWidth: active ? 2 : 1,
+                      borderColor: active ? theme.accent : theme.border,
+                      backgroundColor: active ? theme.surface : "transparent",
+                    }}
+                  >
+                    <Text style={{ fontSize: 16 }}>{c.emoji}</Text>
+                    <Text
+                      style={{
+                        color: active ? theme.text : theme.muted,
+                        fontWeight: "900",
+                      }}
+                    >
+                      {t(c.labelKey as any)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </ScrollView>
+
+          <Text style={{ color: theme.muted, marginTop: 8 }}>
+            {t("capture.categoryHint")}
           </Text>
         </View>
 
