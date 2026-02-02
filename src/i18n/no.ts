@@ -7,6 +7,16 @@ export const no = {
     profiles: { private: "Privat", work: "Jobb" },
   },
 
+  categories: {
+    restaurant: "Restaurant",
+    cafe: "Kafé",
+    hotel: "Hotell",
+    travel: "Reise",
+    experience: "Opplevelse",
+    activity: "Aktivitet",
+    other: "Annet",
+  },
+
   capture: {
     takePhoto: "Ta bilde",
     retakePhoto: "Ta nytt bilde",
@@ -20,8 +30,10 @@ export const no = {
 
     ratingQ: "Likte jeg dette?",
     selected: "Valgt:",
-
     rating: { yes: "Ja", neutral: "Nøytral", no: "Nei" },
+
+    categoryLabel: "Kategori",
+    categoryHint: "Velg én kategori (du kan filtrere i loggen senere).",
 
     commentLabel: "Valgfri kommentar (1–2 linjer)",
     commentPlaceholder: "Skriv kort...",
@@ -51,7 +63,6 @@ export const no = {
     noGps: "(Ingen GPS)",
     rating: { yes: "🙂 Ja", neutral: "😐 Nøytral", no: "🙁 Nei" },
 
-    // NEW: edit + delete UI
     edit: "Rediger",
     done: "Ferdig",
     delete: "Slett",
@@ -60,6 +71,13 @@ export const no = {
     deleteDialogMsg: "Dette sletter innlegget fra denne enheten. Kan ikke angres.",
     cancel: "Avbryt",
     confirmDelete: "Slett",
+
+    filter: "Filter",
+    filterTitle: "Filtrer logg",
+    showAll: "Vis alle",
+    apply: "Bruk",
+    clearFilter: "Nullstill",
+    category: "Kategori",
   },
 
   language: {
