@@ -7,6 +7,16 @@ export const en = {
     profiles: { private: "Private", work: "Work" },
   },
 
+  categories: {
+    restaurant: "Restaurant",
+    cafe: "Café",
+    hotel: "Hotel",
+    travel: "Travel",
+    experience: "Experience",
+    activity: "Activity",
+    other: "Other",
+  },
+
   capture: {
     takePhoto: "Take photo",
     retakePhoto: "Retake photo",
@@ -20,8 +30,10 @@ export const en = {
 
     ratingQ: "Did I like this?",
     selected: "Selected:",
-
     rating: { yes: "Yes", neutral: "Neutral", no: "No" },
+
+    categoryLabel: "Category",
+    categoryHint: "Pick one category (you can filter in the log later).",
 
     commentLabel: "Optional comment (1–2 lines)",
     commentPlaceholder: "Write short...",
@@ -51,7 +63,6 @@ export const en = {
     noGps: "(No GPS)",
     rating: { yes: "🙂 Yes", neutral: "😐 Neutral", no: "🙁 No" },
 
-    // NEW: edit + delete UI
     edit: "Edit",
     done: "Done",
     delete: "Delete",
@@ -60,6 +71,13 @@ export const en = {
     deleteDialogMsg: "This deletes the entry from this device. This cannot be undone.",
     cancel: "Cancel",
     confirmDelete: "Delete",
+
+    filter: "Filter",
+    filterTitle: "Filter log",
+    showAll: "Show all",
+    apply: "Apply",
+    clearFilter: "Reset",
+    category: "Category",
   },
 
   language: {
