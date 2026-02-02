@@ -1,13 +1,24 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { SafeAreaView, View, Text, Pressable, Modal } from "react-native";
+import {
+  SafeAreaView,
+  View,
+  Text,
+  Pressable,
+  Modal,
+} from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { StatusBar } from "expo-status-bar";
+
 import CaptureScreen from "./src/screens/CaptureScreen";
 import LogScreen from "./src/screens/LogScreen";
 import { theme } from "./src/ui/theme";
 import { initI18n, getLang, setLang, t } from "./src/i18n/i18n";
 import Splash from "./src/components/Splash";
+import type { ProfileId } from "./src/types/entry";
 
 type Tab = "capture" | "log";
+
+const PROFILE_KEY = "revisit.profile.v1";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("capture");
@@ -15,20 +26,24 @@ export default function App() {
   const [ready, setReady] = useState(false);
 
   const [menuOpen, setMenuOpen] = useState(false);
-
-  // Splash overlay after init
   const [showSplash, setShowSplash] = useState(true);
+
+  const [activeProfile, setActiveProfile] = useState<ProfileId>("private");
 
   useEffect(() => {
     (async () => {
       await initI18n();
       setLangState(getLang());
+
+      const storedProfile = await AsyncStorage.getItem(PROFILE_KEY);
+      if (storedProfile === "private" || storedProfile === "work") {
+        setActiveProfile(storedProfile);
+      }
+
       setReady(true);
 
-      // Show splash a short moment after app is "ready"
-      // (tweak duration as you like)
       setShowSplash(true);
-      window.setTimeout(() => setShowSplash(false), 2200);
+      window.setTimeout(() => setShowSplash(false), 1600);
     })();
   }, []);
 
@@ -36,8 +51,17 @@ export default function App() {
     return tab === "capture" ? t("app.title") : t("log.title");
   }, [tab, lang]);
 
+  const chooseLang = async (next: "no" | "en") => {
+    await setLang(next);
+    setLangState(next);
+  };
+
+  const setProfile = async (p: ProfileId) => {
+    setActiveProfile(p);
+    await AsyncStorage.setItem(PROFILE_KEY, p);
+  };
+
   if (!ready) {
-    // While init runs, show splash too (feels smoother)
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
         <StatusBar style="light" />
@@ -46,17 +70,12 @@ export default function App() {
     );
   }
 
-  const chooseLang = async (next: "no" | "en") => {
-    await setLang(next);
-    setLangState(next);
-  };
-
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
       <StatusBar style="light" />
 
       <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12 }}>
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
           <Text
             style={{
               color: theme.text,
@@ -68,6 +87,30 @@ export default function App() {
             {headerTitle}
           </Text>
 
+          {/* Profile toggle */}
+          <View
+            style={{
+              flexDirection: "row",
+              borderWidth: 1,
+              borderColor: theme.border,
+              backgroundColor: theme.surface,
+              borderRadius: 999,
+              overflow: "hidden",
+            }}
+          >
+            <ProfilePill
+              active={activeProfile === "private"}
+              label={t("app.profiles.private")}
+              onPress={() => setProfile("private")}
+            />
+            <ProfilePill
+              active={activeProfile === "work"}
+              label={t("app.profiles.work")}
+              onPress={() => setProfile("work")}
+            />
+          </View>
+
+          {/* Hamburger */}
           <Pressable
             onPress={() => setMenuOpen(true)}
             style={{
@@ -94,11 +137,17 @@ export default function App() {
 
       <View style={{ flex: 1 }}>
         <View style={{ flex: 1, display: tab === "capture" ? "flex" : "none" }}>
-          <CaptureScreen isActive={tab === "capture"} />
+          <CaptureScreen
+            isActive={tab === "capture"}
+            activeProfile={activeProfile}
+          />
         </View>
 
         <View style={{ flex: 1, display: tab === "log" ? "flex" : "none" }}>
-          <LogScreen isActive={tab === "log"} />
+          <LogScreen
+            isActive={tab === "log"}
+            activeProfile={activeProfile}
+          />
         </View>
       </View>
 
@@ -189,7 +238,7 @@ export default function App() {
         </Pressable>
       </Modal>
 
-      {/* Splash overlay (in-app) */}
+      {/* Splash overlay */}
       {showSplash ? (
         <View
           style={{
@@ -259,6 +308,33 @@ function MenuChoice({
         borderColor: active ? theme.accent : theme.border,
         backgroundColor: active ? theme.surface : "transparent",
         alignItems: "center",
+      }}
+    >
+      <Text style={{ color: active ? theme.text : theme.muted, fontWeight: "900" }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function ProfilePill({
+  active,
+  label,
+  onPress,
+}: {
+  active: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        paddingHorizontal: 10,
+        paddingVertical: 7,
+        backgroundColor: active ? theme.card : "transparent",
+        borderRightWidth: 1,
+        borderRightColor: theme.border,
       }}
     >
       <Text style={{ color: active ? theme.text : theme.muted, fontWeight: "900" }}>
