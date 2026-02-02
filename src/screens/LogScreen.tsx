@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, Image, Pressable, Text, View, Alert } from "react-native";
 import { theme } from "../ui/theme";
-import type { VisitEntry } from "../types/entry";
+import type { ProfileId, VisitEntry } from "../types/entry";
 import { clearEntries, loadEntries } from "../storage/entries";
 import { t } from "../i18n/i18n";
 
@@ -14,26 +14,40 @@ function ratingLabel(r: VisitEntry["rating"]) {
 function prettyDate(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+  return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`;
 }
 
-export default function LogScreen({ isActive }: { isActive: boolean }) {
+export default function LogScreen({
+  isActive,
+  activeProfile,
+}: {
+  isActive: boolean;
+  activeProfile: ProfileId;
+}) {
   const [entries, setEntries] = useState<VisitEntry[]>([]);
   const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     setBusy(true);
     try {
-      const e = await loadEntries();
+      const e = await loadEntries(activeProfile);
       setEntries(e);
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [activeProfile]);
 
   useEffect(() => {
     if (isActive) refresh();
   }, [isActive, refresh]);
+
+  // Also refresh immediately when profile changes while on the log tab
+  useEffect(() => {
+    if (isActive) refresh();
+  }, [activeProfile, isActive, refresh]);
 
   const empty = useMemo(() => entries.length === 0, [entries.length]);
 
@@ -44,7 +58,7 @@ export default function LogScreen({ isActive }: { isActive: boolean }) {
         text: t("log.deleteAll"),
         style: "destructive",
         onPress: async () => {
-          await clearEntries();
+          await clearEntries(activeProfile);
           await refresh();
         },
       },
@@ -57,11 +71,17 @@ export default function LogScreen({ isActive }: { isActive: boolean }) {
         <Text style={{ color: theme.muted, flex: 1 }}>
           {busy ? t("log.loading") : `${entries.length} ${t("log.entries")}`}
         </Text>
+
         <Pressable onPress={refresh} style={{ padding: 10 }}>
-          <Text style={{ color: theme.accent, fontWeight: "800" }}>{t("log.refresh")}</Text>
+          <Text style={{ color: theme.accent, fontWeight: "800" }}>
+            {t("log.refresh")}
+          </Text>
         </Pressable>
+
         <Pressable onPress={onClear} style={{ padding: 10 }}>
-          <Text style={{ color: theme.danger, fontWeight: "800" }}>{t("log.clear")}</Text>
+          <Text style={{ color: theme.danger, fontWeight: "800" }}>
+            {t("log.clear")}
+          </Text>
         </Pressable>
       </View>
 
