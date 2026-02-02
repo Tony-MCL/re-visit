@@ -1,66 +1,71 @@
-export const no = {
-  app: {
-    title: "Re:visit?",
-    subtitle: "Én opplevelse. Én sannhet.",
-    tabs: { capture: "Fang", log: "Logg" },
-    menu: { title: "Meny" },
-  },
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Localization from "expo-localization";
+import { no } from "./no";
+import { en } from "./en";
 
-  capture: {
-    takePhoto: "Ta bilde",
-    retakePhoto: "Ta nytt bilde",
+export type Lang = "no" | "en";
 
-    statusTaking: "Tar bilde…",
-    statusOptimizing: "Optimaliserer…",
-    statusSaving: "Lagrer…",
+const KEY = "revisit.lang.v1";
 
-    startingCamera: "Starter kamera…",
-    startingCameraHint: "(Mobil-web kan være tregere her)",
+const dict = { no, en };
 
-    ratingQ: "Likte jeg dette?",
-    selected: "Valgt:",
+let currentLang: Lang = "no";
+let current = dict.no;
 
-    rating: { yes: "Ja", neutral: "Nøytral", no: "Nei" },
+function normalizeToLang(deviceTag: string | null | undefined): Lang {
+  // deviceTag examples: "nb-NO", "nn-NO", "en-US", "en", "no", etc.
+  const tag = (deviceTag || "").toLowerCase();
 
-    commentLabel: "Valgfri kommentar (1–2 linjer)",
-    commentPlaceholder: "Skriv kort...",
+  // Norwegian variants
+  if (tag.startsWith("nb") || tag.startsWith("nn") || tag.startsWith("no")) return "no";
 
-    save: "Lagre øyeblikk",
-    saveHint: "Tid lagres alltid. GPS spør vi om først ved lagring.",
+  // English variants
+  if (tag.startsWith("en")) return "en";
 
-    savedTitle: "Lagret",
-    savedMsg: "Opplevelsen er lagret i loggen din.",
+  // Default fallback
+  return "en";
+}
 
-    errTitle: "Feil",
-    errTakePhoto: "Kunne ikke ta bilde. Prøv igjen.",
-    errSave: "Kunne ikke lagre opplevelsen.",
+export async function initI18n() {
+  // 1) If user has chosen language before -> use that
+  const stored = await AsyncStorage.getItem(KEY);
+  if (stored === "en" || stored === "no") {
+    currentLang = stored;
+    current = dict[currentLang];
+    return;
+  }
 
-    cameraTitle: "Kamera",
-    cameraPerm: "Du må gi kameratilgang for å ta bilde.",
-  },
+  // 2) Otherwise choose from device language
+  // Expo Localization: locale can be "nb-NO" etc.
+  // Some Android setups use languageTag in Localization.getLocales()
+  const locales = Localization.getLocales?.() || [];
+  const primary = locales[0]?.languageTag || Localization.locale || "";
 
-  log: {
-    title: "Logg",
-    loading: "Laster…",
-    entries: "oppføringer",
-    refresh: "Oppdater",
-    clear: "Tøm",
+  const autoLang = normalizeToLang(primary);
+  currentLang = autoLang;
+  current = dict[currentLang];
 
-    emptyTitle: "Ingen oppføringer ennå",
-    emptyMsg: "Gå til “Fang”, ta et bilde og lagre første øyeblikk.",
+  // Optional: store it so the app is stable across launches,
+  // until user explicitly changes it in-app later.
+  await AsyncStorage.setItem(KEY, currentLang);
+}
 
-    clearTitle: "Tøm logg",
-    clearMsg: "Dette sletter alle lokale oppføringer på denne enheten.",
-    cancel: "Avbryt",
-    deleteAll: "Slett alt",
+export function getLang(): Lang {
+  return currentLang;
+}
 
-    noGps: "(Ingen GPS)",
-    rating: { yes: "🙂 Ja", neutral: "😐 Nøytral", no: "🙁 Nei" },
-  },
+export async function setLang(lang: Lang) {
+  currentLang = lang;
+  current = dict[lang];
+  await AsyncStorage.setItem(KEY, lang);
+}
 
-  language: {
-    label: "Språk",
-    no: "NO",
-    en: "EN",
-  },
-} as const;
+export function t(path: string): string {
+  const parts = path.split(".");
+  let obj: any = current;
+  for (const p of parts) {
+    obj = obj?.[p];
+    if (obj == null) return path; // fallback
+  }
+  return typeof obj === "string" ? obj : path;
+}
