@@ -18,15 +18,20 @@ import PrimaryButton from "../components/PrimaryButton";
 import SegmentedRating from "../components/SegmentedRating";
 import { theme } from "../ui/theme";
 import type { ProfileId, Rating, VisitEntry } from "../types/entry";
-import { addEntry } from "../storage/entries";
+import { addEntry, countAllEntries } from "../storage/entries";
 import { t } from "../i18n/i18n";
 import { CATEGORIES, type CategoryId } from "../constants/categories";
+import PaywallModal from "../components/PaywallModal";
+import { getPlan } from "../entitlements/plan";
 
 function makeId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 type LocPermissionState = "unknown" | "granted" | "denied";
+
+const FREE_MAX_ENTRIES = 100;
+const FREE_WARN_AT = 80;
 
 export default function CaptureScreen({
   isActive,
@@ -51,6 +56,14 @@ export default function CaptureScreen({
 
   const [camReady, setCamReady] = useState(false);
 
+  // paywall modal
+  const [paywallOpen, setPaywallOpen] = useState(false);
+  const [paywallTitle, setPaywallTitle] = useState("");
+  const [paywallMsg, setPaywallMsg] = useState("");
+
+  // warning only once per screen-session
+  const [warnedThisSession, setWarnedThisSession] = useState(false);
+
   const canSave = useMemo(
     () => !!photoUri && !!rating && !busy,
     [photoUri, rating, busy]
@@ -65,10 +78,17 @@ export default function CaptureScreen({
     setCamReady(false);
   };
 
+  const openPaywall = (title: string, msg: string) => {
+    setPaywallTitle(title);
+    setPaywallMsg(msg);
+    setPaywallOpen(true);
+  };
+
   useEffect(() => {
     if (isActive) {
       setStatus("");
       setCamReady(false);
+      setWarnedThisSession(false);
     }
   }, [isActive]);
 
@@ -164,6 +184,37 @@ export default function CaptureScreen({
   const onSave = async () => {
     if (!photoUri || !rating) return;
 
+    // 1) Plan check (no pro logic yet, just gates)
+    const plan = await getPlan();
+
+    // Work profile is Pro
+    if (plan === "free" && activeProfile === "work") {
+      openPaywall(t("capture.lockedProfileTitle"), t("capture.lockedProfileMsg"));
+      return;
+    }
+
+    // 2) Count check (free max entries)
+    if (plan === "free") {
+      const count = await countAllEntries();
+
+      if (count >= FREE_MAX_ENTRIES) {
+        openPaywall(
+          t("capture.limitHardTitle"),
+          t("capture.limitHardMsg").replace("{{max}}", String(FREE_MAX_ENTRIES))
+        );
+        return;
+      }
+
+      if (!warnedThisSession && count >= FREE_WARN_AT) {
+        setWarnedThisSession(true);
+        Alert.alert(
+          t("capture.limitWarnTitle"),
+          t("capture.limitWarnMsg").replace("{{max}}", String(FREE_MAX_ENTRIES))
+        );
+        // continue to save; warning is soft
+      }
+    }
+
     setBusy(true);
     setStatus(t("capture.statusSaving"));
 
@@ -215,226 +266,238 @@ export default function CaptureScreen({
   const shouldShowCamera = isActive && !photoUri;
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView
+    <>
+      <KeyboardAvoidingView
         style={{ flex: 1 }}
-        contentContainerStyle={{
-          paddingHorizontal: 16,
-          paddingBottom: 28,
-        }}
-        keyboardShouldPersistTaps="handled"
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View
-          style={{
-            backgroundColor: theme.card,
-            borderRadius: 16,
-            borderWidth: 1,
-            borderColor: theme.border,
-            overflow: "hidden",
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingBottom: 28,
           }}
+          keyboardShouldPersistTaps="handled"
         >
-          {photoUri ? (
-            <View>
-              <Image
-                source={{ uri: photoUri }}
-                style={{ width: "100%", height: 360 }}
-                resizeMode="cover"
-              />
+          <View
+            style={{
+              backgroundColor: theme.card,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: theme.border,
+              overflow: "hidden",
+            }}
+          >
+            {photoUri ? (
+              <View>
+                <Image
+                  source={{ uri: photoUri }}
+                  style={{ width: "100%", height: 360 }}
+                  resizeMode="cover"
+                />
 
-              <Pressable
-                onPress={resetCapture}
-                style={{
-                  position: "absolute",
-                  top: 10,
-                  right: 10,
-                  width: 38,
-                  height: 38,
-                  borderRadius: 14,
-                  backgroundColor: "rgba(0,0,0,0.55)",
-                  borderWidth: 1,
-                  borderColor: "rgba(255,255,255,0.25)",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Text style={{ color: "white", fontWeight: "900", fontSize: 18 }}>
-                  ↺
-                </Text>
-              </Pressable>
-            </View>
-          ) : (
-            <View style={{ height: 360 }}>
-              {shouldShowCamera ? (
-                <>
-                  <View style={{ flex: 1 }} pointerEvents="none">
-                    <CameraView
-                      ref={camRef}
-                      style={{ flex: 1 }}
-                      facing="back"
-                      onCameraReady={() => setCamReady(true)}
-                    />
-                  </View>
-
-                  {!camReady ? (
-                    <View
-                      style={{
-                        position: "absolute",
-                        left: 0,
-                        right: 0,
-                        top: 0,
-                        bottom: 0,
-                        alignItems: "center",
-                        justifyContent: "center",
-                        backgroundColor: "rgba(0,0,0,0.25)",
-                      }}
-                      pointerEvents="none"
-                    >
-                      <Text style={{ color: theme.text, fontWeight: "900" }}>
-                        {t("capture.startingCamera")}
-                      </Text>
-                      <Text style={{ color: theme.muted, marginTop: 6 }}>
-                        {t("capture.startingCameraHint")}
-                      </Text>
-                    </View>
-                  ) : null}
-                </>
-              ) : (
-                <View
+                <Pressable
+                  onPress={resetCapture}
                   style={{
-                    flex: 1,
+                    position: "absolute",
+                    top: 10,
+                    right: 10,
+                    width: 38,
+                    height: 38,
+                    borderRadius: 14,
+                    backgroundColor: "rgba(0,0,0,0.55)",
+                    borderWidth: 1,
+                    borderColor: "rgba(255,255,255,0.25)",
                     alignItems: "center",
                     justifyContent: "center",
                   }}
                 >
-                  <Text style={{ color: theme.muted }}>Paused</Text>
-                </View>
-              )}
-            </View>
-          )}
-        </View>
+                  <Text style={{ color: "white", fontWeight: "900", fontSize: 18 }}>
+                    ↺
+                  </Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={{ height: 360 }}>
+                {shouldShowCamera ? (
+                  <>
+                    <View style={{ flex: 1 }} pointerEvents="none">
+                      <CameraView
+                        ref={camRef}
+                        style={{ flex: 1 }}
+                        facing="back"
+                        onCameraReady={() => setCamReady(true)}
+                      />
+                    </View>
 
-        <View style={{ marginTop: 12 }}>
-          <PrimaryButton
-            title={photoUri ? t("capture.retakePhoto") : t("capture.takePhoto")}
-            onPress={onTakePhoto}
-            disabled={busy || (shouldShowCamera && !camReady)}
-          />
-        </View>
-
-        {status ? (
-          <Text style={{ color: theme.muted, marginTop: 10 }}>{status}</Text>
-        ) : null}
-
-        <View style={{ marginTop: 14 }}>
-          <Text style={{ color: theme.text, fontWeight: "800", marginBottom: 8 }}>
-            {t("capture.ratingQ")}
-          </Text>
-
-          <View
-            style={{
-              borderRadius: 16,
-              borderWidth: rating ? 2 : 1,
-              borderColor: rating ? theme.accent : theme.border,
-              padding: 2,
-            }}
-          >
-            <SegmentedRating value={rating} onChange={setRating} />
-          </View>
-
-          <Text style={{ color: theme.muted, marginTop: 8 }}>
-            {t("capture.selected")}{" "}
-            <Text style={{ color: theme.text, fontWeight: "800" }}>
-              {rating === "yes"
-                ? t("capture.rating.yes")
-                : rating === "neutral"
-                ? t("capture.rating.neutral")
-                : rating === "no"
-                ? t("capture.rating.no")
-                : "—"}
-            </Text>
-          </Text>
-        </View>
-
-        {/* Category picker */}
-        <View style={{ marginTop: 14 }}>
-          <Text style={{ color: theme.text, fontWeight: "800", marginBottom: 8 }}>
-            {t("capture.categoryLabel")}
-          </Text>
-
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={{ flexDirection: "row", gap: 10, paddingRight: 6 }}>
-              {CATEGORIES.map((c) => {
-                const active = c.id === categoryId;
-                return (
-                  <Pressable
-                    key={c.id}
-                    onPress={() => setCategoryId(c.id)}
+                    {!camReady ? (
+                      <View
+                        style={{
+                          position: "absolute",
+                          left: 0,
+                          right: 0,
+                          top: 0,
+                          bottom: 0,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          backgroundColor: "rgba(0,0,0,0.25)",
+                        }}
+                        pointerEvents="none"
+                      >
+                        <Text style={{ color: theme.text, fontWeight: "900" }}>
+                          {t("capture.startingCamera")}
+                        </Text>
+                        <Text style={{ color: theme.muted, marginTop: 6 }}>
+                          {t("capture.startingCameraHint")}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </>
+                ) : (
+                  <View
                     style={{
-                      flexDirection: "row",
+                      flex: 1,
                       alignItems: "center",
-                      gap: 8,
-                      paddingHorizontal: 12,
-                      paddingVertical: 10,
-                      borderRadius: 999,
-                      borderWidth: active ? 2 : 1,
-                      borderColor: active ? theme.accent : theme.border,
-                      backgroundColor: active ? theme.surface : "transparent",
+                      justifyContent: "center",
                     }}
                   >
-                    <Text style={{ fontSize: 16 }}>{c.emoji}</Text>
-                    <Text
+                    <Text style={{ color: theme.muted }}>Paused</Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+
+          <View style={{ marginTop: 12 }}>
+            <PrimaryButton
+              title={photoUri ? t("capture.retakePhoto") : t("capture.takePhoto")}
+              onPress={onTakePhoto}
+              disabled={busy || (shouldShowCamera && !camReady)}
+            />
+          </View>
+
+          {status ? (
+            <Text style={{ color: theme.muted, marginTop: 10 }}>{status}</Text>
+          ) : null}
+
+          <View style={{ marginTop: 14 }}>
+            <Text style={{ color: theme.text, fontWeight: "800", marginBottom: 8 }}>
+              {t("capture.ratingQ")}
+            </Text>
+
+            <View
+              style={{
+                borderRadius: 16,
+                borderWidth: rating ? 2 : 1,
+                borderColor: rating ? theme.accent : theme.border,
+                padding: 2,
+              }}
+            >
+              <SegmentedRating value={rating} onChange={setRating} />
+            </View>
+
+            <Text style={{ color: theme.muted, marginTop: 8 }}>
+              {t("capture.selected")}{" "}
+              <Text style={{ color: theme.text, fontWeight: "800" }}>
+                {rating === "yes"
+                  ? t("capture.rating.yes")
+                  : rating === "neutral"
+                  ? t("capture.rating.neutral")
+                  : rating === "no"
+                  ? t("capture.rating.no")
+                  : "—"}
+              </Text>
+            </Text>
+          </View>
+
+          <View style={{ marginTop: 14 }}>
+            <Text style={{ color: theme.text, fontWeight: "800", marginBottom: 8 }}>
+              {t("capture.categoryLabel")}
+            </Text>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={{ flexDirection: "row", gap: 10, paddingRight: 6 }}>
+                {CATEGORIES.map((c) => {
+                  const active = c.id === categoryId;
+                  return (
+                    <Pressable
+                      key={c.id}
+                      onPress={() => setCategoryId(c.id)}
                       style={{
-                        color: active ? theme.text : theme.muted,
-                        fontWeight: "900",
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 8,
+                        paddingHorizontal: 12,
+                        paddingVertical: 10,
+                        borderRadius: 999,
+                        borderWidth: active ? 2 : 1,
+                        borderColor: active ? theme.accent : theme.border,
+                        backgroundColor: active ? theme.surface : "transparent",
                       }}
                     >
-                      {t(c.labelKey as any)}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </ScrollView>
+                      <Text style={{ fontSize: 16 }}>{c.emoji}</Text>
+                      <Text
+                        style={{
+                          color: active ? theme.text : theme.muted,
+                          fontWeight: "900",
+                        }}
+                      >
+                        {t(c.labelKey as any)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </ScrollView>
 
-          <Text style={{ color: theme.muted, marginTop: 8 }}>
-            {t("capture.categoryHint")}
-          </Text>
-        </View>
+            <Text style={{ color: theme.muted, marginTop: 8 }}>
+              {t("capture.categoryHint")}
+            </Text>
+          </View>
 
-        <View style={{ marginTop: 14 }}>
-          <Text style={{ color: theme.text, fontWeight: "800", marginBottom: 8 }}>
-            {t("capture.commentLabel")}
-          </Text>
-          <TextInput
-            value={comment}
-            onChangeText={setComment}
-            placeholder={t("capture.commentPlaceholder")}
-            placeholderTextColor={theme.muted}
-            style={{
-              backgroundColor: theme.surface,
-              borderWidth: 1,
-              borderColor: theme.border,
-              borderRadius: 14,
-              paddingHorizontal: 12,
-              paddingVertical: 10,
-              color: theme.text,
-              minHeight: 44,
-            }}
-            maxLength={140}
-            multiline
-          />
-        </View>
+          <View style={{ marginTop: 14 }}>
+            <Text style={{ color: theme.text, fontWeight: "800", marginBottom: 8 }}>
+              {t("capture.commentLabel")}
+            </Text>
+            <TextInput
+              value={comment}
+              onChangeText={setComment}
+              placeholder={t("capture.commentPlaceholder")}
+              placeholderTextColor={theme.muted}
+              style={{
+                backgroundColor: theme.surface,
+                borderWidth: 1,
+                borderColor: theme.border,
+                borderRadius: 14,
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                color: theme.text,
+                minHeight: 44,
+              }}
+              maxLength={140}
+              multiline
+            />
+          </View>
 
-        <View style={{ marginTop: 14 }}>
-          <PrimaryButton title={t("capture.save")} onPress={onSave} disabled={!canSave} />
-          <Text style={{ color: theme.muted, marginTop: 8 }}>{t("capture.saveHint")}</Text>
-        </View>
+          <View style={{ marginTop: 14 }}>
+            <PrimaryButton title={t("capture.save")} onPress={onSave} disabled={!canSave} />
+            <Text style={{ color: theme.muted, marginTop: 8 }}>{t("capture.saveHint")}</Text>
+          </View>
 
-        <View style={{ height: 90 }} />
-      </ScrollView>
-    </KeyboardAvoidingView>
+          <View style={{ height: 90 }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      <PaywallModal
+        visible={paywallOpen}
+        title={paywallTitle}
+        message={paywallMsg}
+        primaryLabel={t("paywall.primary")}
+        secondaryLabel={t("paywall.secondary")}
+        onPrimary={() => setPaywallOpen(false)} // later: open pricing screen
+        onSecondary={() => setPaywallOpen(false)}
+        onClose={() => setPaywallOpen(false)}
+      />
+    </>
   );
 }
