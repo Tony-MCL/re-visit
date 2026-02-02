@@ -4,6 +4,7 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   Text,
   TextInput,
@@ -52,6 +53,14 @@ export default function CaptureScreen({
     [photoUri, rating, busy]
   );
 
+  const resetCapture = () => {
+    setPhotoUri(null);
+    setRating(null);
+    setComment("");
+    setStatus("");
+    setCamReady(false);
+  };
+
   // Reset transient status when coming back to this tab
   useEffect(() => {
     if (isActive) {
@@ -62,10 +71,7 @@ export default function CaptureScreen({
 
   // When switching profile, clear current draft so user doesn't accidentally save to wrong profile
   useEffect(() => {
-    setPhotoUri(null);
-    setRating(null);
-    setComment("");
-    setStatus("");
+    resetCapture();
   }, [activeProfile]);
 
   const ensureCamera = async () => {
@@ -103,7 +109,6 @@ export default function CaptureScreen({
       const cam = camRef.current;
       if (!cam) throw new Error("Camera ref missing");
 
-      // Web: prefer base64 for stable preview + storage
       const wantBase64 = Platform.OS === "web";
 
       const raw = await cam.takePictureAsync({
@@ -164,7 +169,6 @@ export default function CaptureScreen({
       | { lat: number; lng: number; accuracyM?: number }
       | undefined = undefined;
 
-    // Ask for location only when saving (much faster app start)
     const locOk = await ensureLocationPermission();
 
     if (locOk) {
@@ -178,7 +182,7 @@ export default function CaptureScreen({
           accuracyM: pos.coords.accuracy ?? undefined,
         };
       } catch {
-        // ok: save without location if it fails
+        // ok
       }
     }
 
@@ -194,12 +198,7 @@ export default function CaptureScreen({
 
     try {
       await addEntry(entry);
-
-      setPhotoUri(null);
-      setRating(null);
-      setComment("");
-      setStatus("");
-
+      resetCapture();
       Alert.alert(t("capture.savedTitle"), t("capture.savedMsg"));
     } catch (e) {
       console.error(e);
@@ -210,9 +209,6 @@ export default function CaptureScreen({
     }
   };
 
-  // Only mount the camera when:
-  // - Capture tab is active
-  // - we don't already have a photo preview
   const shouldShowCamera = isActive && !photoUri;
 
   return (
@@ -238,16 +234,39 @@ export default function CaptureScreen({
           }}
         >
           {photoUri ? (
-            <Image
-              source={{ uri: photoUri }}
-              style={{ width: "100%", height: 360 }}
-              resizeMode="cover"
-            />
+            <View>
+              <Image
+                source={{ uri: photoUri }}
+                style={{ width: "100%", height: 360 }}
+                resizeMode="cover"
+              />
+
+              {/* Small reset tab in corner */}
+              <Pressable
+                onPress={resetCapture}
+                style={{
+                  position: "absolute",
+                  top: 10,
+                  right: 10,
+                  width: 38,
+                  height: 38,
+                  borderRadius: 14,
+                  backgroundColor: "rgba(0,0,0,0.55)",
+                  borderWidth: 1,
+                  borderColor: "rgba(255,255,255,0.25)",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text style={{ color: "white", fontWeight: "900", fontSize: 18 }}>
+                  ↺
+                </Text>
+              </Pressable>
+            </View>
           ) : (
             <View style={{ height: 360 }}>
               {shouldShowCamera ? (
                 <>
-                  {/* pointerEvents none => camera won't steal touches on mobile web */}
                   <View style={{ flex: 1 }} pointerEvents="none">
                     <CameraView
                       ref={camRef}
@@ -366,7 +385,6 @@ export default function CaptureScreen({
           <Text style={{ color: theme.muted, marginTop: 8 }}>{t("capture.saveHint")}</Text>
         </View>
 
-        {/* Extra space so bottom tab bar never hides the save button */}
         <View style={{ height: 90 }} />
       </ScrollView>
     </KeyboardAvoidingView>
