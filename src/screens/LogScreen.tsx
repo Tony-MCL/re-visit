@@ -1,10 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { FlatList, Image, Pressable, Text, View, Alert, Modal } from "react-native";
+import {
+  FlatList,
+  Image,
+  Modal,
+  Pressable,
+  Text,
+  View,
+} from "react-native";
 import { theme } from "../ui/theme";
 import type { ProfileId, VisitEntry } from "../types/entry";
 import { deleteEntry, loadEntries } from "../storage/entries";
 import { t } from "../i18n/i18n";
-import { CATEGORIES, normalizeCategoryId, type CategoryId } from "../constants/categories";
+import {
+  CATEGORIES,
+  normalizeCategoryId,
+  type CategoryId,
+} from "../constants/categories";
 
 function ratingLabel(r: VisitEntry["rating"]) {
   if (r === "yes") return t("log.rating.yes");
@@ -39,6 +50,11 @@ export default function LogScreen({
   const [filterOpen, setFilterOpen] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<CategoryId | "all">("all");
 
+  // DELETE MODAL (replaces Alert)
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<VisitEntry | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   const refresh = useCallback(async () => {
     setBusy(true);
     try {
@@ -66,21 +82,28 @@ export default function LogScreen({
 
   const empty = useMemo(() => filteredEntries.length === 0, [filteredEntries.length]);
 
-  const onDelete = (entry: VisitEntry) => {
-    Alert.alert(t("log.deleteDialogTitle"), t("log.deleteDialogMsg"), [
-      { text: t("log.cancel"), style: "cancel" },
-      {
-        text: t("log.confirmDelete"),
-        style: "destructive",
-        onPress: () => {
-          // Don't rely on Alert + async on web — fire-and-refresh safely
-          (async () => {
-            await deleteEntry(entry.id);
-            await refresh();
-          })();
-        },
-      },
-    ]);
+  const openDelete = (entry: VisitEntry) => {
+    setDeleteTarget(entry);
+    setDeleteOpen(true);
+  };
+
+  const closeDelete = () => {
+    if (deleting) return;
+    setDeleteOpen(false);
+    setDeleteTarget(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteEntry(deleteTarget.id);
+      await refresh();
+    } finally {
+      setDeleting(false);
+      setDeleteOpen(false);
+      setDeleteTarget(null);
+    }
   };
 
   return (
@@ -91,7 +114,9 @@ export default function LogScreen({
         </Text>
 
         <Pressable onPress={() => setFilterOpen(true)} style={{ padding: 10 }}>
-          <Text style={{ color: theme.accent, fontWeight: "900" }}>{t("log.filter")}</Text>
+          <Text style={{ color: theme.accent, fontWeight: "900" }}>
+            {t("log.filter")}
+          </Text>
         </Pressable>
 
         <Pressable onPress={() => setEditMode((v) => !v)} style={{ padding: 10 }}>
@@ -106,7 +131,9 @@ export default function LogScreen({
           <Text style={{ color: theme.text, fontWeight: "800", fontSize: 16 }}>
             {t("log.emptyTitle")}
           </Text>
-          <Text style={{ color: theme.muted, marginTop: 8 }}>{t("log.emptyMsg")}</Text>
+          <Text style={{ color: theme.muted, marginTop: 8 }}>
+            {t("log.emptyMsg")}
+          </Text>
         </View>
       ) : (
         <FlatList
@@ -115,6 +142,7 @@ export default function LogScreen({
           contentContainerStyle={{ paddingBottom: 20 }}
           renderItem={({ item }) => {
             const cat = categoryDef(normalizeCategoryId(item.categoryId));
+
             return (
               <View
                 style={{
@@ -135,7 +163,7 @@ export default function LogScreen({
 
                   {editMode ? (
                     <Pressable
-                      onPress={() => onDelete(item)}
+                      onPress={() => openDelete(item)}
                       style={{
                         position: "absolute",
                         top: 10,
@@ -176,11 +204,15 @@ export default function LogScreen({
                       {item.location.lat.toFixed(5)}, {item.location.lng.toFixed(5)}
                     </Text>
                   ) : (
-                    <Text style={{ color: theme.muted, marginTop: 6 }}>{t("log.noGps")}</Text>
+                    <Text style={{ color: theme.muted, marginTop: 6 }}>
+                      {t("log.noGps")}
+                    </Text>
                   )}
 
                   {item.comment ? (
-                    <Text style={{ color: theme.text, marginTop: 10 }}>{item.comment}</Text>
+                    <Text style={{ color: theme.text, marginTop: 10 }}>
+                      {item.comment}
+                    </Text>
                   ) : null}
                 </View>
               </View>
@@ -189,7 +221,7 @@ export default function LogScreen({
         />
       )}
 
-      {/* Filter modal */}
+      {/* FILTER MODAL */}
       <Modal
         transparent
         visible={filterOpen}
@@ -221,7 +253,10 @@ export default function LogScreen({
 
             <View style={{ height: 12 }} />
 
-            <Text style={{ color: theme.muted, fontWeight: "800" }}>{t("log.category")}</Text>
+            <Text style={{ color: theme.muted, fontWeight: "800" }}>
+              {t("log.category")}
+            </Text>
+
             <View style={{ height: 10 }} />
 
             <Pressable
@@ -235,7 +270,9 @@ export default function LogScreen({
                 backgroundColor: categoryFilter === "all" ? theme.surface : "transparent",
               }}
             >
-              <Text style={{ color: theme.text, fontWeight: "900" }}>{t("log.showAll")}</Text>
+              <Text style={{ color: theme.text, fontWeight: "900" }}>
+                {t("log.showAll")}
+              </Text>
             </Pressable>
 
             <View style={{ height: 10 }} />
@@ -282,7 +319,9 @@ export default function LogScreen({
                   alignItems: "center",
                 }}
               >
-                <Text style={{ color: theme.text, fontWeight: "900" }}>{t("log.clearFilter")}</Text>
+                <Text style={{ color: theme.text, fontWeight: "900" }}>
+                  {t("log.clearFilter")}
+                </Text>
               </Pressable>
 
               <Pressable
@@ -297,7 +336,88 @@ export default function LogScreen({
                   alignItems: "center",
                 }}
               >
-                <Text style={{ color: theme.text, fontWeight: "900" }}>{t("log.apply")}</Text>
+                <Text style={{ color: theme.text, fontWeight: "900" }}>
+                  {t("log.apply")}
+                </Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* DELETE CONFIRM MODAL (world-class, no Alert) */}
+      <Modal
+        transparent
+        visible={deleteOpen}
+        animationType="fade"
+        onRequestClose={closeDelete}
+      >
+        <Pressable
+          onPress={closeDelete}
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.55)",
+            padding: 16,
+            justifyContent: "center",
+          }}
+        >
+          <Pressable
+            onPress={() => {}}
+            style={{
+              backgroundColor: theme.card,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: theme.border,
+              padding: 14,
+            }}
+          >
+            <Text style={{ color: theme.text, fontWeight: "900", fontSize: 16 }}>
+              {t("log.deleteDialogTitle")}
+            </Text>
+
+            <Text style={{ color: theme.muted, marginTop: 10 }}>
+              {t("log.deleteDialogMsg")}
+            </Text>
+
+            <View style={{ height: 14 }} />
+
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <Pressable
+                onPress={closeDelete}
+                disabled={deleting}
+                style={{
+                  flex: 1,
+                  paddingVertical: 10,
+                  borderRadius: 12,
+                  backgroundColor: theme.surface,
+                  borderWidth: 1,
+                  borderColor: theme.border,
+                  alignItems: "center",
+                  opacity: deleting ? 0.6 : 1,
+                }}
+              >
+                <Text style={{ color: theme.text, fontWeight: "900" }}>
+                  {t("log.cancel")}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={confirmDelete}
+                disabled={deleting}
+                style={{
+                  flex: 1,
+                  paddingVertical: 10,
+                  borderRadius: 12,
+                  backgroundColor: theme.surface,
+                  borderWidth: 2,
+                  borderColor: theme.danger,
+                  alignItems: "center",
+                  opacity: deleting ? 0.6 : 1,
+                }}
+              >
+                <Text style={{ color: theme.text, fontWeight: "900" }}>
+                  {deleting ? "…" : t("log.confirmDelete")}
+                </Text>
               </Pressable>
             </View>
           </Pressable>
