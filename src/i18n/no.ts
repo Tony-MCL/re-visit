@@ -44,19 +44,22 @@ export const no = {
     title: "Logg",
     loading: "Laster…",
     entries: "oppføringer",
-    refresh: "Oppdater",
-    clear: "Tøm",
 
     emptyTitle: "Ingen oppføringer ennå",
     emptyMsg: "Gå til “Fang”, ta et bilde og lagre første øyeblikk.",
 
-    clearTitle: "Tøm logg",
-    clearMsg: "Dette sletter alle lokale oppføringer for denne profilen.",
-    cancel: "Avbryt",
-    deleteAll: "Slett alt",
-
     noGps: "(Ingen GPS)",
     rating: { yes: "🙂 Ja", neutral: "😐 Nøytral", no: "🙁 Nei" },
+
+    // NEW: edit + delete UI
+    edit: "Rediger",
+    done: "Ferdig",
+    delete: "Slett",
+
+    deleteDialogTitle: "Slett innlegg",
+    deleteDialogMsg: "Dette sletter innlegget fra denne enheten. Kan ikke angres.",
+    cancel: "Avbryt",
+    confirmDelete: "Slett",
   },
 
   language: {
