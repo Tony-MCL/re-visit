@@ -5,6 +5,7 @@ import CaptureScreen from "./src/screens/CaptureScreen";
 import LogScreen from "./src/screens/LogScreen";
 import { theme } from "./src/ui/theme";
 import { initI18n, getLang, setLang, t } from "./src/i18n/i18n";
+import Splash from "./src/components/Splash";
 
 type Tab = "capture" | "log";
 
@@ -15,11 +16,19 @@ export default function App() {
 
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // Splash overlay after init
+  const [showSplash, setShowSplash] = useState(true);
+
   useEffect(() => {
     (async () => {
       await initI18n();
       setLangState(getLang());
       setReady(true);
+
+      // Show splash a short moment after app is "ready"
+      // (tweak duration as you like)
+      setShowSplash(true);
+      window.setTimeout(() => setShowSplash(false), 2200);
     })();
   }, []);
 
@@ -28,14 +37,11 @@ export default function App() {
   }, [tab, lang]);
 
   if (!ready) {
+    // While init runs, show splash too (feels smoother)
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
         <StatusBar style="light" />
-        <View style={{ padding: 16 }}>
-          <Text style={{ color: theme.text, fontWeight: "800" }}>
-            {t("log.loading")}
-          </Text>
-        </View>
+        <Splash />
       </SafeAreaView>
     );
   }
@@ -81,7 +87,9 @@ export default function App() {
           </Pressable>
         </View>
 
-        <Text style={{ color: theme.muted, marginTop: 6 }}>{t("app.subtitle")}</Text>
+        <Text style={{ color: theme.muted, marginTop: 6 }}>
+          {t("app.subtitle")}
+        </Text>
       </View>
 
       <View style={{ flex: 1 }}>
@@ -111,7 +119,12 @@ export default function App() {
       </View>
 
       {/* Hamburger menu */}
-      <Modal transparent visible={menuOpen} animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+      <Modal
+        transparent
+        visible={menuOpen}
+        animationType="fade"
+        onRequestClose={() => setMenuOpen(false)}
+      >
         <Pressable
           onPress={() => setMenuOpen(false)}
           style={{
@@ -175,6 +188,22 @@ export default function App() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Splash overlay (in-app) */}
+      {showSplash ? (
+        <View
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            top: 0,
+            bottom: 0,
+            zIndex: 9999,
+          }}
+        >
+          <Splash />
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
