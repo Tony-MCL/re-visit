@@ -2,11 +2,12 @@ import React from "react";
 import { Pressable, Text, View } from "react-native";
 import { theme } from "../ui/theme";
 import type { Rating } from "../types/entry";
+import { t } from "../i18n/i18n";
 
-const options: Array<{ key: Rating; label: string; emoji: string }> = [
-  { key: "yes", label: "Ja", emoji: "🙂" },
-  { key: "neutral", label: "Nøytral", emoji: "😐" },
-  { key: "no", label: "Nei", emoji: "🙁" },
+const options: Array<{ key: Rating; emoji: string }> = [
+  { key: "yes", emoji: "🙂" },
+  { key: "neutral", emoji: "😐" },
+  { key: "no", emoji: "🙁" },
 ];
 
 export default function SegmentedRating({
@@ -63,7 +64,7 @@ export default function SegmentedRating({
                 fontWeight: active ? "900" : "700",
               }}
             >
-              {opt.emoji} {opt.label}
+              {opt.emoji} {t(`capture.rating.${opt.key}`)}
             </Text>
           </Pressable>
         );
