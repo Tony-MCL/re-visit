@@ -4,6 +4,7 @@ export const no = {
     subtitle: "Én opplevelse. Én sannhet.",
     tabs: { capture: "Fang", log: "Logg" },
     menu: { title: "Meny" },
+    profiles: { private: "Privat", work: "Jobb" },
   },
 
   capture: {
@@ -50,7 +51,7 @@ export const no = {
     emptyMsg: "Gå til “Fang”, ta et bilde og lagre første øyeblikk.",
 
     clearTitle: "Tøm logg",
-    clearMsg: "Dette sletter alle lokale oppføringer på denne enheten.",
+    clearMsg: "Dette sletter alle lokale oppføringer for denne profilen.",
     cancel: "Avbryt",
     deleteAll: "Slett alt",
 
