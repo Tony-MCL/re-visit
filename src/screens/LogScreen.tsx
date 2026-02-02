@@ -2,8 +2,29 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, Image, Pressable, Text, View, Alert } from "react-native";
 import { theme } from "../ui/theme";
 import type { ProfileId, VisitEntry } from "../types/entry";
-import { clearEntries, loadEntries } from "../storage/entries";
+import { loadEntries } from "../storage/entries";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { t } from "../i18n/i18n";
+
+const KEY = "revisit.entries.v1";
+
+type Stored = { entries: VisitEntry[] };
+
+async function deleteOne(entryId: string) {
+  const raw = await AsyncStorage.getItem(KEY);
+  if (!raw) return;
+
+  let parsed: Stored | null = null;
+  try {
+    parsed = JSON.parse(raw) as Stored;
+  } catch {
+    parsed = null;
+  }
+  if (!parsed || !Array.isArray(parsed.entries)) return;
+
+  const next = parsed.entries.filter((e) => e.id !== entryId);
+  await AsyncStorage.setItem(KEY, JSON.stringify({ entries: next }));
+}
 
 function ratingLabel(r: VisitEntry["rating"]) {
   if (r === "yes") return t("log.rating.yes");
@@ -29,6 +50,7 @@ export default function LogScreen({
 }) {
   const [entries, setEntries] = useState<VisitEntry[]>([]);
   const [busy, setBusy] = useState(false);
+  const [editMode, setEditMode] = useState(false);
 
   const refresh = useCallback(async () => {
     setBusy(true);
@@ -44,25 +66,30 @@ export default function LogScreen({
     if (isActive) refresh();
   }, [isActive, refresh]);
 
-  // Also refresh immediately when profile changes while on the log tab
   useEffect(() => {
     if (isActive) refresh();
+    // when profile changes, exit edit mode (avoids confusion)
+    setEditMode(false);
   }, [activeProfile, isActive, refresh]);
 
   const empty = useMemo(() => entries.length === 0, [entries.length]);
 
-  const onClear = async () => {
-    Alert.alert(t("log.clearTitle"), t("log.clearMsg"), [
-      { text: t("log.cancel"), style: "cancel" },
-      {
-        text: t("log.deleteAll"),
-        style: "destructive",
-        onPress: async () => {
-          await clearEntries(activeProfile);
-          await refresh();
+  const onDelete = (entry: VisitEntry) => {
+    Alert.alert(
+      "Slett innlegg",
+      "Dette sletter innlegget fra denne enheten. Kan ikke angres.",
+      [
+        { text: "Avbryt", style: "cancel" },
+        {
+          text: "Slett",
+          style: "destructive",
+          onPress: async () => {
+            await deleteOne(entry.id);
+            await refresh();
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
   return (
@@ -72,15 +99,9 @@ export default function LogScreen({
           {busy ? t("log.loading") : `${entries.length} ${t("log.entries")}`}
         </Text>
 
-        <Pressable onPress={refresh} style={{ padding: 10 }}>
-          <Text style={{ color: theme.accent, fontWeight: "800" }}>
-            {t("log.refresh")}
-          </Text>
-        </Pressable>
-
-        <Pressable onPress={onClear} style={{ padding: 10 }}>
-          <Text style={{ color: theme.danger, fontWeight: "800" }}>
-            {t("log.clear")}
+        <Pressable onPress={() => setEditMode((v) => !v)} style={{ padding: 10 }}>
+          <Text style={{ color: theme.accent, fontWeight: "900" }}>
+            {editMode ? "Ferdig" : "Rediger"}
           </Text>
         </Pressable>
       </View>
@@ -110,11 +131,32 @@ export default function LogScreen({
                 overflow: "hidden",
               }}
             >
-              <Image
-                source={{ uri: item.photoUri }}
-                style={{ width: "100%", height: 220 }}
-                resizeMode="cover"
-              />
+              <View>
+                <Image
+                  source={{ uri: item.photoUri }}
+                  style={{ width: "100%", height: 220 }}
+                  resizeMode="cover"
+                />
+
+                {editMode ? (
+                  <Pressable
+                    onPress={() => onDelete(item)}
+                    style={{
+                      position: "absolute",
+                      top: 10,
+                      right: 10,
+                      paddingVertical: 8,
+                      paddingHorizontal: 12,
+                      borderRadius: 14,
+                      backgroundColor: "rgba(0,0,0,0.55)",
+                      borderWidth: 1,
+                      borderColor: "rgba(255,255,255,0.25)",
+                    }}
+                  >
+                    <Text style={{ color: "white", fontWeight: "900" }}>Slett</Text>
+                  </Pressable>
+                ) : null}
+              </View>
 
               <View style={{ padding: 12 }}>
                 <Text style={{ color: theme.text, fontWeight: "900" }}>
