@@ -66,6 +66,12 @@ export async function loadEntries(profileId?: ProfileId): Promise<VisitEntry[]> 
   return sorted.filter((e) => e.profileId === profileId);
 }
 
+export async function deleteEntry(entryId: string) {
+  const data = await readAll();
+  const next = data.entries.filter((e) => e.id !== entryId);
+  await writeAll({ entries: next });
+}
+
 export async function clearEntries(profileId?: ProfileId) {
   if (!profileId) {
     await writeAll({ entries: [] });
