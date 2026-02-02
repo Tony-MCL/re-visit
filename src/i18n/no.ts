@@ -50,6 +50,19 @@ export const no = {
 
     cameraTitle: "Kamera",
     cameraPerm: "Du må gi kameratilgang for å ta bilde.",
+
+    // NEW: limits/paywall
+    limitWarnTitle: "Heads up",
+    limitWarnMsg:
+      "Du nærmer deg grensen for gratisversjonen. Når du når {{max}}, må du oppgradere for å lagre flere.",
+    limitHardTitle: "Grense nådd",
+    limitHardMsg:
+      "Du har nådd grensen for gratisversjonen ({{max}} oppføringer). Oppgrader for å lagre flere.",
+    lockedProfileTitle: "Jobb-profil er Pro",
+    lockedProfileMsg:
+      "Jobb-profilen er tilgjengelig i Pro. Oppgrader for å bruke flere profiler.",
+    maybeLater: "Senere",
+    learnMore: "Se Pro",
   },
 
   log: {
@@ -78,6 +91,15 @@ export const no = {
     apply: "Bruk",
     clearFilter: "Nullstill",
     category: "Kategori",
+
+    // NEW: work profile locked message
+    lockedTitle: "Jobb-profil er Pro",
+    lockedMsg: "Oppgrader til Pro for å bruke flere profiler.",
+  },
+
+  paywall: {
+    primary: "Se Pro",
+    secondary: "Senere",
   },
 
   language: {
