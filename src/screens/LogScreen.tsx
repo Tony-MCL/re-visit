@@ -2,29 +2,9 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, Image, Pressable, Text, View, Alert, Modal } from "react-native";
 import { theme } from "../ui/theme";
 import type { ProfileId, VisitEntry } from "../types/entry";
-import { loadEntries } from "../storage/entries";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { deleteEntry, loadEntries } from "../storage/entries";
 import { t } from "../i18n/i18n";
 import { CATEGORIES, normalizeCategoryId, type CategoryId } from "../constants/categories";
-
-const KEY = "revisit.entries.v1";
-type Stored = { entries: VisitEntry[] };
-
-async function deleteOne(entryId: string) {
-  const raw = await AsyncStorage.getItem(KEY);
-  if (!raw) return;
-
-  let parsed: Stored | null = null;
-  try {
-    parsed = JSON.parse(raw) as Stored;
-  } catch {
-    parsed = null;
-  }
-  if (!parsed || !Array.isArray(parsed.entries)) return;
-
-  const next = parsed.entries.filter((e) => e.id !== entryId);
-  await AsyncStorage.setItem(KEY, JSON.stringify({ entries: next }));
-}
 
 function ratingLabel(r: VisitEntry["rating"]) {
   if (r === "yes") return t("log.rating.yes");
@@ -92,9 +72,12 @@ export default function LogScreen({
       {
         text: t("log.confirmDelete"),
         style: "destructive",
-        onPress: async () => {
-          await deleteOne(entry.id);
-          await refresh();
+        onPress: () => {
+          // Don't rely on Alert + async on web — fire-and-refresh safely
+          (async () => {
+            await deleteEntry(entry.id);
+            await refresh();
+          })();
         },
       },
     ]);
@@ -123,9 +106,7 @@ export default function LogScreen({
           <Text style={{ color: theme.text, fontWeight: "800", fontSize: 16 }}>
             {t("log.emptyTitle")}
           </Text>
-          <Text style={{ color: theme.muted, marginTop: 8 }}>
-            {t("log.emptyMsg")}
-          </Text>
+          <Text style={{ color: theme.muted, marginTop: 8 }}>{t("log.emptyMsg")}</Text>
         </View>
       ) : (
         <FlatList
@@ -195,9 +176,7 @@ export default function LogScreen({
                       {item.location.lat.toFixed(5)}, {item.location.lng.toFixed(5)}
                     </Text>
                   ) : (
-                    <Text style={{ color: theme.muted, marginTop: 6 }}>
-                      {t("log.noGps")}
-                    </Text>
+                    <Text style={{ color: theme.muted, marginTop: 6 }}>{t("log.noGps")}</Text>
                   )}
 
                   {item.comment ? (
@@ -242,10 +221,7 @@ export default function LogScreen({
 
             <View style={{ height: 12 }} />
 
-            <Text style={{ color: theme.muted, fontWeight: "800" }}>
-              {t("log.category")}
-            </Text>
-
+            <Text style={{ color: theme.muted, fontWeight: "800" }}>{t("log.category")}</Text>
             <View style={{ height: 10 }} />
 
             <Pressable
@@ -306,9 +282,7 @@ export default function LogScreen({
                   alignItems: "center",
                 }}
               >
-                <Text style={{ color: theme.text, fontWeight: "900" }}>
-                  {t("log.clearFilter")}
-                </Text>
+                <Text style={{ color: theme.text, fontWeight: "900" }}>{t("log.clearFilter")}</Text>
               </Pressable>
 
               <Pressable
@@ -323,9 +297,7 @@ export default function LogScreen({
                   alignItems: "center",
                 }}
               >
-                <Text style={{ color: theme.text, fontWeight: "900" }}>
-                  {t("log.apply")}
-                </Text>
+                <Text style={{ color: theme.text, fontWeight: "900" }}>{t("log.apply")}</Text>
               </Pressable>
             </View>
           </Pressable>
