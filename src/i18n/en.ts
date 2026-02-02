@@ -4,6 +4,7 @@ export const en = {
     subtitle: "One moment. One truth.",
     tabs: { capture: "Capture", log: "Log" },
     menu: { title: "Menu" },
+    profiles: { private: "Private", work: "Work" },
   },
 
   capture: {
@@ -50,7 +51,7 @@ export const en = {
     emptyMsg: "Go to “Capture”, take a photo, and save your first moment.",
 
     clearTitle: "Clear log",
-    clearMsg: "This deletes all local entries on this device.",
+    clearMsg: "This deletes all local entries for this profile.",
     cancel: "Cancel",
     deleteAll: "Delete all",
 
