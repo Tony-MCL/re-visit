@@ -50,6 +50,7 @@ export const en = {
 
     cameraTitle: "Camera",
     cameraPerm: "Camera permission is required to take a photo.",
+    enableCamera: "Enable camera",
 
     // NEW: limits/paywall
     limitWarnTitle: "Heads up",
