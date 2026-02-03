@@ -1,5 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { SafeAreaView, View, Text, Pressable, Modal } from "react-native";
+import {
+  SafeAreaView,
+  View,
+  Text,
+  Pressable,
+  Modal,
+  Platform,
+} from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { StatusBar } from "expo-status-bar";
 
@@ -26,24 +33,25 @@ export default function App() {
 
   const [activeProfile, setActiveProfile] = useState<ProfileId>("private");
 
-  // plan (free/pro)
+  // plan (free/pro) – beholdes for dev-toggle og fremtidig paywall
   const [plan, setPlanState] = useState<Plan>("free");
 
   useEffect(() => {
     (async () => {
       await initI18n();
-      const l = await getLang();
-      setLangState(l);
+      setLangState(getLang());
+
+      const storedPlan = await getPlan();
+      setPlanState(storedPlan);
 
       const storedProfile = await AsyncStorage.getItem(PROFILE_KEY);
       if (storedProfile === "private" || storedProfile === "work") {
         setActiveProfile(storedProfile);
       }
 
-      const p = await getPlan();
-      setPlanState(p);
-
       setReady(true);
+
+      setShowSplash(true);
       window.setTimeout(() => setShowSplash(false), 1600);
     })();
   }, []);
@@ -58,6 +66,7 @@ export default function App() {
   };
 
   const setProfile = async (p: ProfileId) => {
+    // ✅ JOBB ER ÅPEN FOR FREE (ingen gating her)
     setActiveProfile(p);
     await AsyncStorage.setItem(PROFILE_KEY, p);
   };
@@ -76,246 +85,312 @@ export default function App() {
     );
   }
 
+  // ✅ WEB-FIX: lås app-root til viewport og stopp document-scroll ("vindu i vindu")
+  const rootStyle: any = {
+    flex: 1,
+    backgroundColor: theme.bg,
+    ...(Platform.OS === "web"
+      ? { height: "100vh", overflow: "hidden" }
+      : null),
+  };
+
+  const contentWrapStyle: any = {
+    flex: 1,
+    ...(Platform.OS === "web" ? { overflow: "hidden" } : null),
+  };
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
+    <SafeAreaView style={rootStyle}>
       <StatusBar style="light" />
 
-      {showSplash ? (
-        <Splash />
-      ) : (
-        <>
-          {/* Header */}
+      <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Text
+            style={{
+              color: theme.text,
+              fontSize: 20,
+              fontWeight: "700",
+              flex: 1,
+            }}
+          >
+            {headerTitle}
+          </Text>
+
+          {/* Profile toggle */}
           <View
             style={{
-              paddingHorizontal: 16,
-              paddingTop: 14,
-              paddingBottom: 12,
-              borderBottomWidth: 1,
-              borderBottomColor: theme.border,
-              backgroundColor: theme.bg,
               flexDirection: "row",
+              borderWidth: 1,
+              borderColor: theme.border,
+              backgroundColor: theme.surface,
+              borderRadius: 999,
+              overflow: "hidden",
+            }}
+          >
+            <ProfilePill
+              active={activeProfile === "private"}
+              label={t("app.profiles.private")}
+              onPress={() => setProfile("private")}
+              showLock={false}
+            />
+
+            <ProfilePill
+              active={activeProfile === "work"}
+              label={t("app.profiles.work")}
+              onPress={() => setProfile("work")}
+              showLock={false}
+            />
+          </View>
+
+          {/* Hamburger */}
+          <Pressable
+            onPress={() => setMenuOpen(true)}
+            style={{
+              width: 40,
+              height: 36,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: theme.border,
+              backgroundColor: theme.surface,
               alignItems: "center",
-              justifyContent: "space-between",
+              justifyContent: "center",
             }}
           >
             <Text style={{ color: theme.text, fontWeight: "900", fontSize: 18 }}>
-              {headerTitle}
+              ☰
+            </Text>
+          </Pressable>
+        </View>
+
+        <Text style={{ color: theme.muted, marginTop: 6 }}>{t("app.subtitle")}</Text>
+      </View>
+
+      {/* ✅ Viktig: overflow hidden på web for å unngå "app i app" / dobbel scroll */}
+      <View style={contentWrapStyle}>
+        <View style={{ flex: 1, display: tab === "capture" ? "flex" : "none" }}>
+          <CaptureScreen isActive={tab === "capture"} activeProfile={activeProfile} />
+        </View>
+
+        <View style={{ flex: 1, display: tab === "log" ? "flex" : "none" }}>
+          <LogScreen isActive={tab === "log"} activeProfile={activeProfile} />
+        </View>
+      </View>
+
+      <View
+        style={{
+          flexDirection: "row",
+          borderTopWidth: 1,
+          borderTopColor: theme.border,
+          backgroundColor: theme.surface,
+        }}
+      >
+        <TabButton active={tab === "capture"} onPress={() => setTab("capture")}>
+          {t("app.tabs.capture")}
+        </TabButton>
+        <TabButton active={tab === "log"} onPress={() => setTab("log")}>
+          {t("app.tabs.log")}
+        </TabButton>
+      </View>
+
+      {/* Hamburger menu */}
+      <Modal
+        transparent
+        visible={menuOpen}
+        animationType="fade"
+        onRequestClose={() => setMenuOpen(false)}
+      >
+        <Pressable
+          onPress={() => setMenuOpen(false)}
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.55)",
+            padding: 16,
+            justifyContent: "flex-start",
+          }}
+        >
+          <Pressable
+            onPress={() => {}}
+            style={{
+              alignSelf: "flex-end",
+              width: 280,
+              backgroundColor: theme.card,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: theme.border,
+              padding: 14,
+            }}
+          >
+            <Text style={{ color: theme.text, fontWeight: "900", fontSize: 16 }}>
+              {t("app.menu.title")}
             </Text>
 
-            <Pressable onPress={() => setMenuOpen(true)}>
-              <Text style={{ color: theme.accent, fontWeight: "900", fontSize: 18 }}>
-                ☰
-              </Text>
-            </Pressable>
-          </View>
+            <View style={{ height: 12 }} />
 
-          {/* Tabs */}
-          <View style={{ flexDirection: "row", paddingHorizontal: 16, paddingTop: 12, gap: 10 }}>
-            <Pressable
-              onPress={() => setTab("capture")}
-              style={{
-                flex: 1,
-                paddingVertical: 12,
-                borderRadius: 14,
-                borderWidth: 1,
-                borderColor: tab === "capture" ? theme.accent : theme.border,
-                backgroundColor: tab === "capture" ? theme.surface : "transparent",
-                alignItems: "center",
-              }}
-            >
-              <Text style={{ color: tab === "capture" ? theme.text : theme.muted, fontWeight: "900" }}>
-                {t("app.tabs.capture")}
-              </Text>
-            </Pressable>
+            <Text style={{ color: theme.muted, fontWeight: "800" }}>
+              {t("language.label")}
+            </Text>
 
-            <Pressable
-              onPress={() => setTab("log")}
-              style={{
-                flex: 1,
-                paddingVertical: 12,
-                borderRadius: 14,
-                borderWidth: 1,
-                borderColor: tab === "log" ? theme.accent : theme.border,
-                backgroundColor: tab === "log" ? theme.surface : "transparent",
-                alignItems: "center",
-              }}
-            >
-              <Text style={{ color: tab === "log" ? theme.text : theme.muted, fontWeight: "900" }}>
-                {t("app.tabs.log")}
-              </Text>
-            </Pressable>
-          </View>
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+              <MenuChoice
+                label={t("language.no")}
+                active={lang === "no"}
+                onPress={() => chooseLang("no")}
+              />
+              <MenuChoice
+                label={t("language.en")}
+                active={lang === "en"}
+                onPress={() => chooseLang("en")}
+              />
+            </View>
 
-          {/* Content */}
-          <View style={{ flex: 1 }}>
-            <CaptureScreen isActive={tab === "capture"} activeProfile={activeProfile} />
-            <LogScreen isActive={tab === "log"} activeProfile={activeProfile} />
-          </View>
+            {/* DEV: plan toggle */}
+            <View style={{ height: 16 }} />
+            <Text style={{ color: theme.muted, fontWeight: "800" }}>
+              {t("dev.title")}
+            </Text>
 
-          {/* Menu */}
-          <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+              <MenuChoice
+                label={t("dev.setFree")}
+                active={plan === "free"}
+                onPress={() => setPlanAndPersist("free")}
+              />
+              <MenuChoice
+                label={t("dev.setPro")}
+                active={plan === "pro"}
+                onPress={() => setPlanAndPersist("pro")}
+              />
+            </View>
+
+            <View style={{ height: 12 }} />
+
             <Pressable
               onPress={() => setMenuOpen(false)}
               style={{
-                flex: 1,
-                backgroundColor: "rgba(0,0,0,0.55)",
-                padding: 18,
-                justifyContent: "center",
+                marginTop: 6,
+                paddingVertical: 10,
+                borderRadius: 12,
+                backgroundColor: theme.surface,
+                borderWidth: 1,
+                borderColor: theme.border,
+                alignItems: "center",
               }}
             >
-              <Pressable
-                onPress={() => {}}
-                style={{
-                  backgroundColor: theme.card,
-                  borderRadius: 18,
-                  borderWidth: 1,
-                  borderColor: theme.border,
-                  padding: 16,
-                }}
-              >
-                <Text style={{ color: theme.text, fontWeight: "900", fontSize: 18 }}>
-                  {t("app.menu.title")}
-                </Text>
-
-                <Text style={{ color: theme.muted, marginTop: 12 }}>
-                  {t("settings.language")}
-                </Text>
-
-                <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
-                  <Pressable
-                    onPress={() => chooseLang("no")}
-                    style={{
-                      flex: 1,
-                      paddingVertical: 12,
-                      borderRadius: 14,
-                      borderWidth: 1,
-                      borderColor: lang === "no" ? theme.accent : theme.border,
-                      backgroundColor: lang === "no" ? theme.surface : "transparent",
-                      alignItems: "center",
-                    }}
-                  >
-                    <Text style={{ color: lang === "no" ? theme.text : theme.muted, fontWeight: "900" }}>
-                      Norsk
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => chooseLang("en")}
-                    style={{
-                      flex: 1,
-                      paddingVertical: 12,
-                      borderRadius: 14,
-                      borderWidth: 1,
-                      borderColor: lang === "en" ? theme.accent : theme.border,
-                      backgroundColor: lang === "en" ? theme.surface : "transparent",
-                      alignItems: "center",
-                    }}
-                  >
-                    <Text style={{ color: lang === "en" ? theme.text : theme.muted, fontWeight: "900" }}>
-                      English
-                    </Text>
-                  </Pressable>
-                </View>
-
-                <Text style={{ color: theme.muted, marginTop: 14 }}>
-                  {t("settings.profile")}
-                </Text>
-
-                <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
-                  <Pressable
-                    onPress={() => setProfile("private")}
-                    style={{
-                      flex: 1,
-                      paddingVertical: 12,
-                      borderRadius: 14,
-                      borderWidth: 1,
-                      borderColor: activeProfile === "private" ? theme.accent : theme.border,
-                      backgroundColor: activeProfile === "private" ? theme.surface : "transparent",
-                      alignItems: "center",
-                    }}
-                  >
-                    <Text style={{ color: activeProfile === "private" ? theme.text : theme.muted, fontWeight: "900" }}>
-                      {t("app.profiles.private")}
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => setProfile("work")}
-                    style={{
-                      flex: 1,
-                      paddingVertical: 12,
-                      borderRadius: 14,
-                      borderWidth: 1,
-                      borderColor: activeProfile === "work" ? theme.accent : theme.border,
-                      backgroundColor: activeProfile === "work" ? theme.surface : "transparent",
-                      alignItems: "center",
-                    }}
-                  >
-                    <Text style={{ color: activeProfile === "work" ? theme.text : theme.muted, fontWeight: "900" }}>
-                      {t("app.profiles.work")}
-                    </Text>
-                  </Pressable>
-                </View>
-
-                <Text style={{ color: theme.muted, marginTop: 14 }}>
-                  {t("settings.dev")}
-                </Text>
-
-                <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
-                  <Pressable
-                    onPress={() => setPlanAndPersist("free")}
-                    style={{
-                      flex: 1,
-                      paddingVertical: 12,
-                      borderRadius: 14,
-                      borderWidth: 1,
-                      borderColor: plan === "free" ? theme.accent : theme.border,
-                      backgroundColor: plan === "free" ? theme.surface : "transparent",
-                      alignItems: "center",
-                    }}
-                  >
-                    <Text style={{ color: plan === "free" ? theme.text : theme.muted, fontWeight: "900" }}>
-                      Free
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => setPlanAndPersist("pro")}
-                    style={{
-                      flex: 1,
-                      paddingVertical: 12,
-                      borderRadius: 14,
-                      borderWidth: 1,
-                      borderColor: plan === "pro" ? theme.accent : theme.border,
-                      backgroundColor: plan === "pro" ? theme.surface : "transparent",
-                      alignItems: "center",
-                    }}
-                  >
-                    <Text style={{ color: plan === "pro" ? theme.text : theme.muted, fontWeight: "900" }}>
-                      Pro
-                    </Text>
-                  </Pressable>
-                </View>
-
-                <Pressable
-                  onPress={() => setMenuOpen(false)}
-                  style={{
-                    marginTop: 16,
-                    paddingVertical: 12,
-                    borderRadius: 14,
-                    alignItems: "center",
-                    backgroundColor: theme.surface,
-                    borderWidth: 1,
-                    borderColor: theme.border,
-                  }}
-                >
-                  <Text style={{ color: theme.text, fontWeight: "900" }}>OK</Text>
-                </Pressable>
-              </Pressable>
+              <Text style={{ color: theme.text, fontWeight: "900" }}>OK</Text>
             </Pressable>
-          </Modal>
-        </>
-      )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Splash overlay */}
+      {showSplash ? (
+        <View
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            top: 0,
+            bottom: 0,
+            zIndex: 9999,
+          }}
+        >
+          <Splash />
+        </View>
+      ) : null}
     </SafeAreaView>
+  );
+}
+
+function TabButton({
+  active,
+  onPress,
+  children,
+}: {
+  active: boolean;
+  onPress: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        flex: 1,
+        paddingVertical: 14,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <Text
+        style={{
+          color: active ? theme.text : theme.muted,
+          fontWeight: active ? "700" : "600",
+        }}
+      >
+        {children}
+      </Text>
+    </Pressable>
+  );
+}
+
+function MenuChoice({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        flex: 1,
+        paddingVertical: 10,
+        borderRadius: 12,
+        borderWidth: active ? 2 : 1,
+        borderColor: active ? theme.accent : theme.border,
+        backgroundColor: active ? theme.surface : "transparent",
+        alignItems: "center",
+      }}
+    >
+      <Text style={{ color: active ? theme.text : theme.muted, fontWeight: "900" }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function ProfilePill({
+  active,
+  label,
+  onPress,
+  showLock,
+}: {
+  active: boolean;
+  label: string;
+  onPress: () => void;
+  showLock?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        paddingHorizontal: 10,
+        paddingVertical: 7,
+        backgroundColor: active ? theme.card : "transparent",
+        borderRightWidth: 1,
+        borderRightColor: theme.border,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        opacity: showLock ? 0.8 : 1,
+      }}
+    >
+      <Text style={{ color: active ? theme.text : theme.muted, fontWeight: "900" }}>
+        {label}
+      </Text>
+      {showLock ? <Text style={{ fontWeight: "900" }}>🔒</Text> : null}
+    </Pressable>
   );
 }
