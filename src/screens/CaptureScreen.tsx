@@ -1,3 +1,6 @@
+// ============================
+// BLOCK: IMPORTS (START)
+// ============================
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -10,10 +13,11 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { CameraView, useCameraPermissions } from "expo-camera";
+import type { CameraView } from "expo-camera";
 import * as Location from "expo-location";
 import * as ImageManipulator from "expo-image-manipulator";
 
+import CaptureCamera from "../components/CaptureCamera";
 import PrimaryButton from "../components/PrimaryButton";
 import SegmentedRating from "../components/SegmentedRating";
 import { theme } from "../ui/theme";
@@ -23,6 +27,9 @@ import { t } from "../i18n/i18n";
 import { CATEGORIES, type CategoryId } from "../constants/categories";
 import PaywallModal from "../components/PaywallModal";
 import { getPlan } from "../entitlements/plan";
+// ============================
+// BLOCK: IMPORTS (END)
+// ============================
 
 function makeId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -40,9 +47,12 @@ export default function CaptureScreen({
   isActive: boolean;
   activeProfile: ProfileId;
 }) {
+  // ============================
+  // BLOCK: STATE / REFS (START)
+  // ============================
   const camRef = useRef<CameraView>(null);
 
-  const [camPerm, requestCamPerm] = useCameraPermissions();
+  const [camPermGranted, setCamPermGranted] = useState(false);
   const [locPerm, setLocPerm] = useState<LocPermissionState>("unknown");
 
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -52,7 +62,7 @@ export default function CaptureScreen({
   const [categoryId, setCategoryId] = useState<CategoryId>("other");
 
   const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState<string>("");
+  const [status, setStatus] = useState("");
 
   const [camReady, setCamReady] = useState(false);
 
@@ -63,6 +73,9 @@ export default function CaptureScreen({
 
   // warning only once per screen-session
   const [warnedThisSession, setWarnedThisSession] = useState(false);
+  // ============================
+  // BLOCK: STATE / REFS (END)
+  // ============================
 
   const canSave = useMemo(
     () => !!photoUri && !!rating && !busy,
@@ -96,30 +109,29 @@ export default function CaptureScreen({
     resetCapture();
   }, [activeProfile]);
 
-  const ensureCamera = async () => {
-    if (camPerm?.granted) return true;
-    const res = await requestCamPerm();
-    return res.granted;
-  };
-
   const ensureLocationPermission = async (): Promise<boolean> => {
     if (locPerm === "granted") return true;
     if (locPerm === "denied") return false;
 
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      const ok = status === "granted";
-      setLocPerm(ok ? "granted" : "denied");
-      return ok;
-    } catch {
+      if (status === "granted") {
+        setLocPerm("granted");
+        return true;
+      }
+      setLocPerm("denied");
+      return false;
+    } catch (e) {
+      console.error(e);
       setLocPerm("denied");
       return false;
     }
   };
 
-  const onTakePhoto = async () => {
-    const ok = await ensureCamera();
-    if (!ok) {
+  const handleTakePhoto = async () => {
+    if (busy) return;
+
+    if (!camPermGranted) {
       Alert.alert(t("capture.cameraTitle"), t("capture.cameraPerm"));
       return;
     }
@@ -152,46 +164,27 @@ export default function CaptureScreen({
             }
           );
 
-          if (manipulated.base64) {
-            setPhotoUri(`data:image/jpeg;base64,${manipulated.base64}`);
-          } else {
-            setPhotoUri(manipulated.uri);
-          }
+          setPhotoUri(manipulated.uri);
         } else {
           setPhotoUri(raw.uri);
         }
-
-        setStatus("");
-        return;
       }
 
-      if (wantBase64 && raw?.base64) {
-        setPhotoUri(`data:image/jpeg;base64,${raw.base64}`);
-        setStatus("");
-        return;
-      }
-
-      throw new Error("No usable photo data returned");
+      setStatus("");
     } catch (e) {
       console.error(e);
       setStatus("");
-      Alert.alert(t("capture.errTitle"), t("capture.errTakePhoto"));
+      Alert.alert(t("capture.errTitle"), t("capture.errPhoto"));
     } finally {
       setBusy(false);
     }
   };
 
-  const onSave = async () => {
+  const handleSave = async () => {
     if (!photoUri || !rating) return;
 
-    // 1) Plan check (no pro logic yet, just gates)
+    // 1) Plan check (Free vs Pro)
     const plan = await getPlan();
-
-    // Work profile is Pro
-    if (plan === "free" && activeProfile === "work") {
-      openPaywall(t("capture.lockedProfileTitle"), t("capture.lockedProfileMsg"));
-      return;
-    }
 
     // 2) Count check (free max entries)
     if (plan === "free") {
@@ -207,59 +200,62 @@ export default function CaptureScreen({
 
       if (!warnedThisSession && count >= FREE_WARN_AT) {
         setWarnedThisSession(true);
-        Alert.alert(
+        openPaywall(
           t("capture.limitWarnTitle"),
           t("capture.limitWarnMsg").replace("{{max}}", String(FREE_MAX_ENTRIES))
         );
-        // continue to save; warning is soft
+        return;
       }
     }
 
     setBusy(true);
     setStatus(t("capture.statusSaving"));
 
-    let loc:
-      | { lat: number; lng: number; accuracyM?: number }
-      | undefined = undefined;
-
-    const locOk = await ensureLocationPermission();
-
-    if (locOk) {
-      try {
-        const pos = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-        loc = {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracyM: pos.coords.accuracy ?? undefined,
-        };
-      } catch {
-        // ok
-      }
-    }
-
-    const entry: VisitEntry = {
-      id: makeId(),
-      createdAtIso: new Date().toISOString(),
-      photoUri,
-      rating,
-      comment: comment.trim() ? comment.trim() : undefined,
-      location: loc,
-      profileId: activeProfile,
-      categoryId,
-    };
+    let loc: VisitEntry["location"] | undefined;
 
     try {
-      await addEntry(entry);
-      resetCapture();
-      Alert.alert(t("capture.savedTitle"), t("capture.savedMsg"));
+      const okLoc = await ensureLocationPermission();
+      if (okLoc) {
+        try {
+          const pos = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          loc = {
+            lat: pos.coords.latitude,
+            lon: pos.coords.longitude,
+          };
+        } catch {
+          // ok
+        }
+      }
+
+      const entry: VisitEntry = {
+        id: makeId(),
+        createdAtIso: new Date().toISOString(),
+        photoUri,
+        rating,
+        comment: comment.trim() ? comment.trim() : undefined,
+        location: loc,
+        profileId: activeProfile,
+        categoryId,
+      };
+
+      try {
+        await addEntry(entry);
+        resetCapture();
+        Alert.alert(t("capture.savedTitle"), t("capture.savedMsg"));
+      } catch (e) {
+        console.error(e);
+        setStatus("");
+        Alert.alert(t("capture.errTitle"), t("capture.errSave"));
+      } finally {
+        setBusy(false);
+      }
     } catch (e) {
       console.error(e);
       setStatus("");
-      Alert.alert(t("capture.errTitle"), t("capture.errSave"));
-    } finally {
       setBusy(false);
+      Alert.alert(t("capture.errTitle"), t("capture.errSave"));
     }
   };
 
@@ -321,16 +317,17 @@ export default function CaptureScreen({
               <View style={{ height: 360 }}>
                 {shouldShowCamera ? (
                   <>
-                    <View style={{ flex: 1 }} pointerEvents="none">
-                      <CameraView
-                        ref={camRef}
-                        style={{ flex: 1 }}
-                        facing="back"
-                        onCameraReady={() => setCamReady(true)}
+                    <View style={{ flex: 1 }}>
+                      <CaptureCamera
+                        isActive={shouldShowCamera}
+                        camRef={camRef}
+                        onReadyChange={(ready) => setCamReady(ready)}
+                        onPermissionChange={(granted) => setCamPermGranted(granted)}
+                        height={360}
                       />
                     </View>
 
-                    {!camReady ? (
+                    {!camReady && camPermGranted ? (
                       <View
                         style={{
                           position: "absolute",
@@ -361,130 +358,111 @@ export default function CaptureScreen({
                       justifyContent: "center",
                     }}
                   >
-                    <Text style={{ color: theme.muted }}>Paused</Text>
+                    <Text style={{ color: theme.muted }}>{t("capture.inactive")}</Text>
                   </View>
                 )}
               </View>
             )}
-          </View>
 
-          <View style={{ marginTop: 12 }}>
-            <PrimaryButton
-              title={photoUri ? t("capture.retakePhoto") : t("capture.takePhoto")}
-              onPress={onTakePhoto}
-              disabled={busy || (shouldShowCamera && !camReady)}
-            />
-          </View>
-
-          {status ? (
-            <Text style={{ color: theme.muted, marginTop: 10 }}>{status}</Text>
-          ) : null}
-
-          <View style={{ marginTop: 14 }}>
-            <Text style={{ color: theme.text, fontWeight: "800", marginBottom: 8 }}>
-              {t("capture.ratingQ")}
-            </Text>
-
-            <View
-              style={{
-                borderRadius: 16,
-                borderWidth: rating ? 2 : 1,
-                borderColor: rating ? theme.accent : theme.border,
-                padding: 2,
-              }}
-            >
-              <SegmentedRating value={rating} onChange={setRating} />
-            </View>
-
-            <Text style={{ color: theme.muted, marginTop: 8 }}>
-              {t("capture.selected")}{" "}
-              <Text style={{ color: theme.text, fontWeight: "800" }}>
-                {rating === "yes"
-                  ? t("capture.rating.yes")
-                  : rating === "neutral"
-                  ? t("capture.rating.neutral")
-                  : rating === "no"
-                  ? t("capture.rating.no")
-                  : "—"}
+            <View style={{ padding: 14 }}>
+              <Text style={{ color: theme.text, fontWeight: "900" }}>
+                {t("capture.ratingQ")}
               </Text>
-            </Text>
-          </View>
 
-          <View style={{ marginTop: 14 }}>
-            <Text style={{ color: theme.text, fontWeight: "800", marginBottom: 8 }}>
-              {t("capture.categoryLabel")}
-            </Text>
+              <View style={{ marginTop: 10 }}>
+                <SegmentedRating value={rating} onChange={setRating} />
+              </View>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={{ flexDirection: "row", gap: 10, paddingRight: 6 }}>
+              <Text style={{ color: theme.text, fontWeight: "900", marginTop: 14 }}>
+                {t("capture.category")}
+              </Text>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{
+                  paddingVertical: 8,
+                  gap: 10,
+                }}
+              >
                 {CATEGORIES.map((c) => {
-                  const active = c.id === categoryId;
+                  const active = categoryId === c.id;
                   return (
                     <Pressable
                       key={c.id}
                       onPress={() => setCategoryId(c.id)}
                       style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 8,
                         paddingHorizontal: 12,
                         paddingVertical: 10,
                         borderRadius: 999,
                         borderWidth: active ? 2 : 1,
                         borderColor: active ? theme.accent : theme.border,
                         backgroundColor: active ? theme.surface : "transparent",
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 8,
                       }}
                     >
-                      <Text style={{ fontSize: 16 }}>{c.emoji}</Text>
+                      <Text style={{ fontWeight: "900" }}>{c.emoji}</Text>
                       <Text
                         style={{
                           color: active ? theme.text : theme.muted,
                           fontWeight: "900",
                         }}
                       >
-                        {t(c.labelKey as any)}
+                        {t(`categories.${c.id}` as const)}
                       </Text>
                     </Pressable>
                   );
                 })}
+              </ScrollView>
+
+              <Text style={{ color: theme.text, fontWeight: "900", marginTop: 14 }}>
+                {t("capture.comment")}
+              </Text>
+
+              <TextInput
+                value={comment}
+                onChangeText={setComment}
+                placeholder={t("capture.commentPh")}
+                placeholderTextColor={theme.muted}
+                style={{
+                  marginTop: 8,
+                  minHeight: 44,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: theme.border,
+                  backgroundColor: theme.surface,
+                  color: theme.text,
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                }}
+                multiline
+              />
+
+              <View style={{ marginTop: 14, gap: 10 }}>
+                {!photoUri ? (
+                  <PrimaryButton
+                    label={t("capture.takePhoto")}
+                    onPress={handleTakePhoto}
+                    disabled={busy}
+                  />
+                ) : (
+                  <PrimaryButton
+                    label={t("capture.save")}
+                    onPress={handleSave}
+                    disabled={!canSave}
+                  />
+                )}
+
+                {status ? (
+                  <Text style={{ color: theme.muted, textAlign: "center" }}>
+                    {status}
+                  </Text>
+                ) : null}
               </View>
-            </ScrollView>
-
-            <Text style={{ color: theme.muted, marginTop: 8 }}>
-              {t("capture.categoryHint")}
-            </Text>
+            </View>
           </View>
-
-          <View style={{ marginTop: 14 }}>
-            <Text style={{ color: theme.text, fontWeight: "800", marginBottom: 8 }}>
-              {t("capture.commentLabel")}
-            </Text>
-            <TextInput
-              value={comment}
-              onChangeText={setComment}
-              placeholder={t("capture.commentPlaceholder")}
-              placeholderTextColor={theme.muted}
-              style={{
-                backgroundColor: theme.surface,
-                borderWidth: 1,
-                borderColor: theme.border,
-                borderRadius: 14,
-                paddingHorizontal: 12,
-                paddingVertical: 10,
-                color: theme.text,
-                minHeight: 44,
-              }}
-              maxLength={140}
-              multiline
-            />
-          </View>
-
-          <View style={{ marginTop: 14 }}>
-            <PrimaryButton title={t("capture.save")} onPress={onSave} disabled={!canSave} />
-            <Text style={{ color: theme.muted, marginTop: 8 }}>{t("capture.saveHint")}</Text>
-          </View>
-
-          <View style={{ height: 90 }} />
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -494,9 +472,8 @@ export default function CaptureScreen({
         message={paywallMsg}
         primaryLabel={t("paywall.primary")}
         secondaryLabel={t("paywall.secondary")}
-        onPrimary={() => setPaywallOpen(false)} // later: open pricing screen
+        onPrimary={() => setPaywallOpen(false)}
         onSecondary={() => setPaywallOpen(false)}
-        onClose={() => setPaywallOpen(false)}
       />
     </>
   );
