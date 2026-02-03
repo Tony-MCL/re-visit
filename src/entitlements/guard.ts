@@ -2,8 +2,9 @@ import type { ProfileId } from "../types/entry";
 import type { Plan } from "./plan";
 
 export function isProfileAllowed(plan: Plan, profileId: ProfileId) {
-  if (plan === "pro") return true;
-  return profileId === "private";
+  // Current policy: both profiles are available for Free and Pro.
+  // Keep this function for future entitlement rules.
+  return profileId === "private" || profileId === "work";
 }
 
 export function explainProfileLock() {
