@@ -2,7 +2,7 @@ export const LIMITS = {
   free: {
     maxEntries: 100,
     warnAt: 80,
-    profiles: ["private"] as const,
+    profiles: ["private", "work"] as const,
   },
   pro: {
     maxEntries: Number.POSITIVE_INFINITY,
