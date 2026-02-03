@@ -1,16 +1,42 @@
-// ============================
-// BLOCK: IMPORTS (START)
-// ============================
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { FlatList, Image, Modal, Pressable, Text, View } from "react-native";
+import {
+  FlatList,
+  Image,
+  Modal,
+  Pressable,
+  Text,
+  View,
+} from "react-native";
+
 import { theme } from "../ui/theme";
-import type { ProfileId, VisitEntry } from "../types/entry";
-import { deleteEntry, listEntries } from "../storage/entries";
+import type { ProfileId, VisitEntry, Rating } from "../types/entry";
+import { deleteEntry, loadEntries } from "../storage/entries";
 import { t } from "../i18n/i18n";
 import { CATEGORIES, type CategoryId } from "../constants/categories";
-// ============================
-// BLOCK: IMPORTS (END)
-// ============================
+
+function normalizeCategoryId(id: any): CategoryId {
+  const known = CATEGORIES.some((c) => c.id === id);
+  return known ? (id as CategoryId) : "other";
+}
+
+function ratingLabel(r: Rating) {
+  if (r === "yes") return t("log.rating.yes");
+  if (r === "neutral") return t("log.rating.neutral");
+  return t("log.rating.no");
+}
+
+function prettyDate(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`;
+}
+
+function categoryDef(id: CategoryId) {
+  return CATEGORIES.find((c) => c.id === id) ?? CATEGORIES[CATEGORIES.length - 1];
+}
 
 export default function LogScreen({
   isActive,
@@ -19,15 +45,12 @@ export default function LogScreen({
   isActive: boolean;
   activeProfile: ProfileId;
 }) {
-  const [items, setItems] = useState<VisitEntry[]>([]);
+  const [entries, setEntries] = useState<VisitEntry[]>([]);
   const [busy, setBusy] = useState(false);
+  const [editMode, setEditMode] = useState(false);
 
-  // filter
-  const [filterCategory, setFilterCategory] = useState<CategoryId | "all">("all");
-
-  // preview
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewItem, setPreviewItem] = useState<VisitEntry | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState<CategoryId | "all">("all");
 
   // delete modal
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -37,8 +60,8 @@ export default function LogScreen({
   const refresh = useCallback(async () => {
     setBusy(true);
     try {
-      const list = await listEntries(activeProfile);
-      setItems(list);
+      const e = await loadEntries(activeProfile);
+      setEntries(e);
     } finally {
       setBusy(false);
     }
@@ -49,29 +72,31 @@ export default function LogScreen({
   }, [isActive, refresh]);
 
   useEffect(() => {
-    if (isActive) {
-      refresh();
-    }
-  }, [isActive, refresh, filterCategory]);
+    if (isActive) refresh();
+    setEditMode(false);
+    setCategoryFilter("all");
+  }, [activeProfile, isActive, refresh]);
 
-  const filtered = useMemo(() => {
-    if (filterCategory === "all") return items;
-    return items.filter((i) => i.categoryId === filterCategory);
-  }, [items, filterCategory]);
+  const filteredEntries = useMemo(() => {
+    if (categoryFilter === "all") return entries;
+    return entries.filter((e) => normalizeCategoryId(e.categoryId) === categoryFilter);
+  }, [entries, categoryFilter]);
 
-  const openPreview = (item: VisitEntry) => {
-    setPreviewItem(item);
-    setPreviewOpen(true);
+  const empty = useMemo(() => filteredEntries.length === 0, [filteredEntries.length]);
+
+  const openDelete = (entry: VisitEntry) => {
+    setDeleteTarget(entry);
+    setDeleteOpen(true);
   };
 
-  const askDelete = (item: VisitEntry) => {
-    setDeleteTarget(item);
-    setDeleteOpen(true);
+  const closeDelete = () => {
+    if (deleting) return;
+    setDeleteOpen(false);
+    setDeleteTarget(null);
   };
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
-
     setDeleting(true);
     try {
       await deleteEntry(deleteTarget.id);
@@ -84,140 +109,124 @@ export default function LogScreen({
   };
 
   return (
-    <>
-      <View style={{ paddingHorizontal: 16, paddingTop: 14 }}>
-        <Text style={{ color: theme.text, fontWeight: "900", fontSize: 18 }}>
-          {t("log.title")}
+    <View style={{ flex: 1, paddingHorizontal: 16 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}>
+        <Text style={{ color: theme.muted, flex: 1 }}>
+          {busy ? t("log.loading") : `${filteredEntries.length} ${t("log.entries")}`}
         </Text>
 
-        {/* Filter */}
+        <Pressable onPress={() => setFilterOpen(true)} style={{ padding: 10 }}>
+          <Text style={{ color: theme.accent, fontWeight: "900" }}>{t("log.filter")}</Text>
+        </Pressable>
+
+        <Pressable onPress={() => setEditMode((v) => !v)} style={{ padding: 10 }}>
+          <Text style={{ color: theme.accent, fontWeight: "900" }}>
+            {editMode ? t("log.done") : t("log.edit")}
+          </Text>
+        </Pressable>
+      </View>
+
+      {empty ? (
+        <View style={{ paddingTop: 40 }}>
+          <Text style={{ color: theme.text, fontWeight: "800", fontSize: 16 }}>
+            {t("log.emptyTitle")}
+          </Text>
+          <Text style={{ color: theme.muted, marginTop: 8 }}>{t("log.emptyMsg")}</Text>
+        </View>
+      ) : (
         <FlatList
-          data={[{ id: "all" as const, emoji: "📋" }, ...CATEGORIES]}
-          keyExtractor={(i) => i.id}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 10, paddingVertical: 12 }}
+          data={filteredEntries}
+          keyExtractor={(it) => it.id}
+          contentContainerStyle={{ paddingBottom: 20 }}
           renderItem={({ item }) => {
-            const id = item.id;
-            const active = filterCategory === id;
-
-            const label =
-              id === "all"
-                ? t("log.filterAll")
-                : t(`categories.${id}` as const);
-
+            const cat = categoryDef(normalizeCategoryId(item.categoryId));
             return (
-              <Pressable
-                onPress={() => setFilterCategory(id)}
+              <View
                 style={{
-                  paddingHorizontal: 12,
-                  paddingVertical: 10,
-                  borderRadius: 999,
-                  borderWidth: active ? 2 : 1,
-                  borderColor: active ? theme.accent : theme.border,
-                  backgroundColor: active ? theme.surface : "transparent",
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 8,
+                  marginBottom: 12,
+                  backgroundColor: theme.card,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: theme.border,
+                  overflow: "hidden",
                 }}
               >
-                <Text style={{ fontWeight: "900" }}>
-                  {"emoji" in item ? item.emoji : "📋"}
-                </Text>
-                <Text
-                  style={{
-                    color: active ? theme.text : theme.muted,
-                    fontWeight: "900",
-                  }}
-                >
-                  {label}
-                </Text>
-              </Pressable>
+                <View>
+                  <Image
+                    source={{ uri: item.photoUri }}
+                    style={{ width: "100%", height: 220 }}
+                    resizeMode="cover"
+                  />
+
+                  {editMode ? (
+                    <Pressable
+                      onPress={() => openDelete(item)}
+                      style={{
+                        position: "absolute",
+                        top: 10,
+                        right: 10,
+                        paddingVertical: 8,
+                        paddingHorizontal: 12,
+                        borderRadius: 14,
+                        backgroundColor: "rgba(0,0,0,0.55)",
+                        borderWidth: 1,
+                        borderColor: "rgba(255,255,255,0.25)",
+                      }}
+                    >
+                      <Text style={{ color: "white", fontWeight: "900" }}>
+                        {t("log.delete")}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+
+                <View style={{ padding: 12 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Text style={{ fontSize: 16 }}>{cat.emoji}</Text>
+                    <Text style={{ color: theme.muted, fontWeight: "900" }}>
+                      {t(cat.labelKey as any)}
+                    </Text>
+                  </View>
+
+                  <Text style={{ color: theme.text, fontWeight: "900", marginTop: 6 }}>
+                    {ratingLabel(item.rating)}
+                  </Text>
+
+                  <Text style={{ color: theme.muted, marginTop: 6 }}>
+                    {prettyDate(item.createdAtIso)}
+                  </Text>
+
+                  {item.location ? (
+                    <Text style={{ color: theme.muted, marginTop: 6 }}>
+                      {item.location.lat.toFixed(5)}, {item.location.lng.toFixed(5)}
+                    </Text>
+                  ) : (
+                    <Text style={{ color: theme.muted, marginTop: 6 }}>{t("log.noGps")}</Text>
+                  )}
+
+                  {item.comment ? (
+                    <Text style={{ color: theme.text, marginTop: 10 }}>{item.comment}</Text>
+                  ) : null}
+                </View>
+              </View>
             );
           }}
         />
-      </View>
+      )}
 
-      <FlatList
-        data={filtered}
-        keyExtractor={(i) => i.id}
-        contentContainerStyle={{
-          paddingHorizontal: 16,
-          paddingBottom: 20,
-        }}
-        ListEmptyComponent={
-          <View style={{ paddingTop: 24, paddingHorizontal: 16 }}>
-            <Text style={{ color: theme.muted }}>
-              {busy ? t("log.loading") : t("log.empty")}
-            </Text>
-          </View>
-        }
-        renderItem={({ item }) => (
-          <Pressable
-            onPress={() => openPreview(item)}
-            style={{
-              marginBottom: 12,
-              borderWidth: 1,
-              borderColor: theme.border,
-              backgroundColor: theme.card,
-              borderRadius: 16,
-              overflow: "hidden",
-            }}
-          >
-            <Image source={{ uri: item.photoUri }} style={{ height: 180, width: "100%" }} />
-
-            <View style={{ padding: 12 }}>
-              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                <Text style={{ color: theme.text, fontWeight: "900" }}>
-                  {t(`categories.${item.categoryId}` as const)}
-                </Text>
-                <Text style={{ color: theme.muted }}>
-                  {item.rating === "yes" ? "🙂" : item.rating === "no" ? "🙁" : "😐"}
-                </Text>
-              </View>
-
-              {item.comment ? (
-                <Text style={{ color: theme.text, marginTop: 8 }}>{item.comment}</Text>
-              ) : null}
-
-              <Pressable
-                onPress={() => askDelete(item)}
-                style={{ marginTop: 10, alignSelf: "flex-start" }}
-              >
-                <Text style={{ color: theme.danger, fontWeight: "900" }}>
-                  {t("log.delete")}
-                </Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        )}
-      />
-
-      {/* Preview */}
-      <Modal visible={previewOpen} animationType="slide" onRequestClose={() => setPreviewOpen(false)}>
-        <View style={{ flex: 1, backgroundColor: theme.bg }}>
-          <View style={{ padding: 16 }}>
-            <Pressable onPress={() => setPreviewOpen(false)}>
-              <Text style={{ color: theme.accent, fontWeight: "900" }}>
-                {t("log.close")}
-              </Text>
-            </Pressable>
-          </View>
-
-          {previewItem ? (
-            <ScrollPreview item={previewItem} />
-          ) : null}
-        </View>
-      </Modal>
-
-      {/* Delete confirmation modal */}
-      <Modal visible={deleteOpen} transparent animationType="fade" onRequestClose={() => setDeleteOpen(false)}>
+      {/* FILTER MODAL */}
+      <Modal
+        transparent
+        visible={filterOpen}
+        animationType="fade"
+        onRequestClose={() => setFilterOpen(false)}
+      >
         <Pressable
-          onPress={() => setDeleteOpen(false)}
+          onPress={() => setFilterOpen(false)}
           style={{
             flex: 1,
             backgroundColor: "rgba(0,0,0,0.55)",
-            padding: 18,
+            padding: 16,
             justifyContent: "center",
           }}
         >
@@ -225,28 +234,127 @@ export default function LogScreen({
             onPress={() => {}}
             style={{
               backgroundColor: theme.card,
-              borderRadius: 18,
+              borderRadius: 16,
               borderWidth: 1,
               borderColor: theme.border,
-              padding: 16,
+              padding: 14,
             }}
           >
-            <Text style={{ color: theme.text, fontWeight: "900", fontSize: 18 }}>
+            <Text style={{ color: theme.text, fontWeight: "900", fontSize: 16 }}>
+              {t("log.filterTitle")}
+            </Text>
+
+            <View style={{ height: 12 }} />
+
+            <Text style={{ color: theme.muted, fontWeight: "800" }}>{t("log.category")}</Text>
+            <View style={{ height: 10 }} />
+
+            <Pressable
+              onPress={() => setCategoryFilter("all")}
+              style={{
+                paddingVertical: 10,
+                paddingHorizontal: 12,
+                borderRadius: 14,
+                borderWidth: categoryFilter === "all" ? 2 : 1,
+                borderColor: categoryFilter === "all" ? theme.accent : theme.border,
+                backgroundColor: categoryFilter === "all" ? theme.surface : "transparent",
+              }}
+            >
+              <Text style={{ color: theme.text, fontWeight: "900" }}>{t("log.showAll")}</Text>
+            </Pressable>
+
+            <View style={{ height: 10 }} />
+
+            {CATEGORIES.map((c) => {
+              const active = categoryFilter === c.id;
+              return (
+                <Pressable
+                  key={c.id}
+                  onPress={() => setCategoryFilter(c.id)}
+                  style={{
+                    marginTop: 8,
+                    paddingVertical: 10,
+                    paddingHorizontal: 12,
+                    borderRadius: 14,
+                    borderWidth: active ? 2 : 1,
+                    borderColor: active ? theme.accent : theme.border,
+                    backgroundColor: active ? theme.surface : "transparent",
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
+                  <Text style={{ fontSize: 16 }}>{c.emoji}</Text>
+                  <Text style={{ color: theme.text, fontWeight: "900" }}>
+                    {t(c.labelKey as any)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+
+            <View style={{ height: 12 }} />
+
+            <Pressable
+              onPress={() => setFilterOpen(false)}
+              style={{
+                marginTop: 6,
+                paddingVertical: 10,
+                borderRadius: 12,
+                backgroundColor: theme.surface,
+                borderWidth: 1,
+                borderColor: theme.border,
+                alignItems: "center",
+              }}
+            >
+              <Text style={{ color: theme.text, fontWeight: "900" }}>OK</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* DELETE MODAL */}
+      <Modal
+        transparent
+        visible={deleteOpen}
+        animationType="fade"
+        onRequestClose={closeDelete}
+      >
+        <Pressable
+          onPress={closeDelete}
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.55)",
+            padding: 16,
+            justifyContent: "center",
+          }}
+        >
+          <Pressable
+            onPress={() => {}}
+            style={{
+              backgroundColor: theme.card,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: theme.border,
+              padding: 14,
+            }}
+          >
+            <Text style={{ color: theme.text, fontWeight: "900", fontSize: 16 }}>
               {t("log.deleteTitle")}
             </Text>
+
             <Text style={{ color: theme.muted, marginTop: 10 }}>
               {t("log.deleteMsg")}
             </Text>
 
-            <View style={{ flexDirection: "row", gap: 10, marginTop: 16 }}>
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
               <Pressable
-                onPress={() => setDeleteOpen(false)}
+                onPress={closeDelete}
                 style={{
                   flex: 1,
                   paddingVertical: 12,
                   borderRadius: 14,
-                  alignItems: "center",
                   backgroundColor: theme.danger,
+                  alignItems: "center",
                 }}
               >
                 <Text style={{ color: "white", fontWeight: "900" }}>
@@ -261,9 +369,9 @@ export default function LogScreen({
                   flex: 1,
                   paddingVertical: 12,
                   borderRadius: 14,
-                  alignItems: "center",
                   backgroundColor: theme.ok,
-                  opacity: deleting ? 0.7 : 1,
+                  alignItems: "center",
+                  opacity: deleting ? 0.75 : 1,
                 }}
               >
                 <Text style={{ color: "white", fontWeight: "900" }}>
@@ -274,35 +382,6 @@ export default function LogScreen({
           </Pressable>
         </Pressable>
       </Modal>
-    </>
-  );
-}
-
-function ScrollPreview({ item }: { item: VisitEntry }) {
-  return (
-    <View style={{ paddingHorizontal: 16 }}>
-      <Image
-        source={{ uri: item.photoUri }}
-        style={{
-          width: "100%",
-          height: 420,
-          borderRadius: 16,
-          borderWidth: 1,
-          borderColor: theme.border,
-        }}
-      />
-
-      <View style={{ marginTop: 12 }}>
-        <Text style={{ color: theme.text, fontWeight: "900", fontSize: 18 }}>
-          {t(`categories.${item.categoryId}` as const)}
-        </Text>
-
-        {item.comment ? (
-          <Text style={{ color: theme.text, marginTop: 8 }}>{item.comment}</Text>
-        ) : (
-          <Text style={{ color: theme.muted, marginTop: 8 }}>{t("log.noComment")}</Text>
-        )}
-      </View>
     </View>
   );
 }
