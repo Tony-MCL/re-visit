@@ -50,6 +50,7 @@ export const no = {
 
     cameraTitle: "Kamera",
     cameraPerm: "Du må gi kameratilgang for å ta bilde.",
+    enableCamera: "Gi kameratilgang",
 
     // NEW: limits/paywall
     limitWarnTitle: "Heads up",
