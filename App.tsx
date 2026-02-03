@@ -1,12 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  SafeAreaView,
-  View,
-  Text,
-  Pressable,
-  Modal,
-  Platform,
-} from "react-native";
+import { SafeAreaView, View, Text, Pressable, Modal, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { StatusBar } from "expo-status-bar";
 
@@ -33,7 +26,7 @@ export default function App() {
 
   const [activeProfile, setActiveProfile] = useState<ProfileId>("private");
 
-  // plan (free/pro) – beholdes for dev-toggle og fremtidig paywall
+  // plan (free/pro) – beholdes som dev-toggle
   const [plan, setPlanState] = useState<Plan>("free");
 
   useEffect(() => {
@@ -66,7 +59,7 @@ export default function App() {
   };
 
   const setProfile = async (p: ProfileId) => {
-    // ✅ JOBB ER ÅPEN FOR FREE (ingen gating her)
+    // ✅ Begge profiler er åpne for Free og Pro
     setActiveProfile(p);
     await AsyncStorage.setItem(PROFILE_KEY, p);
   };
@@ -85,18 +78,11 @@ export default function App() {
     );
   }
 
-  // ✅ WEB-FIX: lås app-root til viewport og stopp document-scroll ("vindu i vindu")
+  // (valgfritt) web-fix mot “document scroll” om du vil – skader ikke native
   const rootStyle: any = {
     flex: 1,
     backgroundColor: theme.bg,
-    ...(Platform.OS === "web"
-      ? { height: "100vh", overflow: "hidden" }
-      : null),
-  };
-
-  const contentWrapStyle: any = {
-    flex: 1,
-    ...(Platform.OS === "web" ? { overflow: "hidden" } : null),
+    ...(Platform.OS === "web" ? { height: "100vh", overflow: "hidden" } : null),
   };
 
   return (
@@ -131,14 +117,12 @@ export default function App() {
               active={activeProfile === "private"}
               label={t("app.profiles.private")}
               onPress={() => setProfile("private")}
-              showLock={false}
             />
 
             <ProfilePill
               active={activeProfile === "work"}
               label={t("app.profiles.work")}
               onPress={() => setProfile("work")}
-              showLock={false}
             />
           </View>
 
@@ -165,8 +149,7 @@ export default function App() {
         <Text style={{ color: theme.muted, marginTop: 6 }}>{t("app.subtitle")}</Text>
       </View>
 
-      {/* ✅ Viktig: overflow hidden på web for å unngå "app i app" / dobbel scroll */}
-      <View style={contentWrapStyle}>
+      <View style={{ flex: 1, ...(Platform.OS === "web" ? { overflow: "hidden" } : null) }}>
         <View style={{ flex: 1, display: tab === "capture" ? "flex" : "none" }}>
           <CaptureScreen isActive={tab === "capture"} activeProfile={activeProfile} />
         </View>
@@ -243,8 +226,8 @@ export default function App() {
               />
             </View>
 
-            {/* DEV: plan toggle */}
             <View style={{ height: 16 }} />
+
             <Text style={{ color: theme.muted, fontWeight: "800" }}>
               {t("dev.title")}
             </Text>
@@ -282,7 +265,6 @@ export default function App() {
         </Pressable>
       </Modal>
 
-      {/* Splash overlay */}
       {showSplash ? (
         <View
           style={{
@@ -365,12 +347,10 @@ function ProfilePill({
   active,
   label,
   onPress,
-  showLock,
 }: {
   active: boolean;
   label: string;
   onPress: () => void;
-  showLock?: boolean;
 }) {
   return (
     <Pressable
@@ -384,13 +364,11 @@ function ProfilePill({
         flexDirection: "row",
         alignItems: "center",
         gap: 6,
-        opacity: showLock ? 0.8 : 1,
       }}
     >
       <Text style={{ color: active ? theme.text : theme.muted, fontWeight: "900" }}>
         {label}
       </Text>
-      {showLock ? <Text style={{ fontWeight: "900" }}>🔒</Text> : null}
     </Pressable>
   );
 }
